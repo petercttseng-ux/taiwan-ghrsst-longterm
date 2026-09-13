@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>臺灣周邊海域 GHRSST 長期海溫時空動態分析</title>
+<meta name="description" content="以 GHRSST / NOAA OISST 每日海面水溫資料，分析臺灣周邊海域 116–128°E、18–32°N 之長期時空動態、趨勢與海洋熱浪。">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="loading">
+  <div class="spin"></div>
+  <div id="loadmsg">載入中…</div>
+</div>
+
+<header>
+  <h1>臺灣周邊海域 GHRSST 長期海溫時空動態分析</h1>
+  <div class="sub">
+    Taiwan Seas Long-term SST Dynamics ·
+    範圍 <b>116–128°E, 18–32°N</b> · 網格 <b>0.25°</b> ·
+    資料 <b id="hdSrc">NOAA OISST v2.1 / GHRSST MUR L4</b> ·
+    期間 <b id="hdPeriod">—</b>
+  </div>
+</header>
+
+<div class="tabbar">
+  <nav class="tabs" id="tabs">
+    <button data-p="build" class="on">資料建置</button>
+    <button data-p="ov">總覽</button>
+    <button data-p="map">空間分布</button>
+    <button data-p="trend">長期趨勢</button>
+    <button data-p="series">時間序列</button>
+    <button data-p="hov">Hovmöller</button>
+    <button data-p="mx">年月矩陣</button>
+    <button data-p="mhw">海洋熱浪</button>
+    <button data-p="meth">方法與限制</button>
+  </nav>
+</div>
+
+<div class="wrap">
+
+<!-- ============ 資料建置 ============ -->
+<section class="page on" id="p-build">
+  <div class="card">
+    <h2>資料建置 <small>Data build — 於您的瀏覽器直接向 ERDDAP 擷取，不經任何中介伺服器</small></h2>
+    <p class="note">
+      本儀表板不隨附預先下載的海溫資料。按下「開始建置」後，頁面會直接向 NOAA ERDDAP 的
+      <code>griddap</code> 介面請求 116–128°E、18–32°N 範圍的每日網格 SST（NetCDF 次集），
+      在瀏覽器內完成氣候基期、趨勢與海洋熱浪的全部運算，並快取於本機 IndexedDB。
+      第一次約需 10–25 分鐘（視網路而定），之後開啟只需數秒。
+    </p>
+
+    <div class="ctl">
+      <label>資料來源</label>
+      <div class="seg" id="srcSeg">
+        <button data-s="oisst" class="on">NOAA OISST v2.1（0.25°，1981– ）</button>
+        <button data-s="mur">GHRSST MUR L4 月平均（0.05°，2002– ）</button>
+      </div>
+      <label>ERDDAP 節點</label>
+      <select id="mirrorSel"></select>
+    </div>
+    <div class="ctl">
+      <label>起始年</label><input type="text" id="yFrom" value="1982" size="5">
+      <label>結束年</label><input type="text" id="yTo" value="" size="5" placeholder="最新">
+      <label>氣候基期</label><input type="text" id="baseFrom" value="1991" size="5">–<input type="text" id="baseTo" value="2020" size="5">
+      <button class="btn" id="btnBuild">開始建置</button>
+      <button class="btn" id="btnTest">連線自我檢測</button>
+      <button class="btn" id="btnClear">清除快取</button>
+      <button class="btn" id="btnExport" disabled>匯出資料檔</button>
+    </div>
+
+    <div id="progWrap" style="display:none">
+      <div class="bar"><div class="barfill" id="barfill"></div></div>
+      <div class="note mono" id="progTxt">—</div>
+    </div>
+    <div id="buildLog" class="logbox mono"></div>
+  </div>
+
+  <div class="card">
+    <h2>沒有網路存取權時 <small>Offline / server-side route</small></h2>
+    <p class="note">
+      若您的環境無法直接連到 ERDDAP（例如受機關防火牆限制），可改在有網路的機器上執行
+      <code>tools/fetch_ghrsst.py</code> 與 <code>tools/build_ghrsst.py</code>，
+      產出與瀏覽器版完全相同的 <code>data/</code> 資料檔後放回本目錄，本頁即會直接載入而略過建置步驟。
+      兩條路徑使用同一套演算法定義（氣候基期視窗、Hobday 熱浪判準、Theil–Sen 趨勢），結果可互相驗證。
+    </p>
+<pre class="code">python3 tools/fetch_ghrsst.py --src oisst --from 1982 --to 2026 --out raw/
+python3 tools/build_ghrsst.py --raw raw/ --base 1991 2020 --out data/</pre>
+  </div>
+</section>
+
+<!-- ============ 總覽 ============ -->
+<section class="page" id="p-ov">
+  <div class="kpis" id="ovKpi"></div>
+  <div class="card">
+    <h2>全域年平均海溫與長期趨勢 <small>Domain annual mean SST</small></h2>
+    <p class="note">面積加權（cos φ）年平均；虛線為 Theil–Sen 穩健趨勢；Mann–Kendall 檢定之 p 值標於圖內。</p>
+    <canvas id="ovAnn" height="300"></canvas>
+  </div>
+  <div class="card">
+    <h2>各海域趨勢比較 <small>Regional warming rates</small></h2>
+    <p class="note">依 Theil–Sen 斜率排序；星號標示 Mann–Kendall 檢定 p &lt; 0.05。</p>
+    <canvas id="ovBar" height="320"></canvas>
+  </div>
+  <div class="card">
+    <h2>海洋熱浪日數的年代變化 <small>MHW days per year</small></h2>
+    <p class="note">以氣候基期之逐日序 90 百分位為門檻；長條為全域面積加權年熱浪日數。</p>
+    <canvas id="ovMhw" height="280"></canvas>
+  </div>
+</section>
+
+<!-- ============ 空間分布 ============ -->
+<section class="page" id="p-map">
+  <div class="card">
+    <div class="ctl">
+      <label>圖層</label>
+      <div class="seg" id="mapLayer">
+        <button data-l="sst" class="on">月平均海溫</button>
+        <button data-l="ano">月距平</button>
+      </div>
+      <button class="btn" id="mapPlay">▶ 播放</button>
+      <span class="datebig" id="mapLbl">—</span>
+    </div>
+    <div class="ctl"><input type="range" id="mapSlider" min="0" max="0" value="0"></div>
+    <div class="mapgrid">
+      <div>
+        <div id="mapwrap"><canvas id="mapcv"></canvas><div id="tip"></div></div>
+        <div class="legend"><canvas id="mapLeg" width="260" height="12"></canvas><span id="mapLegTxt"></span></div>
+      </div>
+      <div>
+        <div class="card" style="margin:0">
+          <h2>格點時間序列 <small>Click a cell</small></h2>
+          <p class="note" id="ptInfo">在左圖點選任一格點。</p>
+          <canvas id="ptCv" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 長期趨勢 ============ -->
+<section class="page" id="p-trend">
+  <div class="card">
+    <div class="ctl">
+      <label>統計場</label>
+      <select id="trField">
+        <option value="trend">升溫速率 Theil–Sen（°C/10yr）</option>
+        <option value="trendP">Mann–Kendall p 值</option>
+        <option value="mean">全期平均海溫（°C）</option>
+        <option value="amp">季節振幅（°C）</option>
+        <option value="phase">最暖日（日序）</option>
+        <option value="sdInter">年際標準差（°C）</option>
+        <option value="mhwDays">年均熱浪日數（日）</option>
+        <option value="mhwDelta">熱浪日數變化（後半期－前半期）</option>
+      </select>
+      <label><input type="checkbox" id="trSig" checked> 僅顯著格點加深（p&lt;0.05）</label>
+    </div>
+    <div class="mapgrid">
+      <div>
+        <div id="trwrap"><canvas id="trCv"></canvas><div id="tip2"></div></div>
+        <div class="legend"><canvas id="trLeg" width="260" height="12"></canvas><span id="trLegTxt"></span></div>
+      </div>
+      <div>
+        <div class="card" style="margin:0">
+          <h2 id="trTitle">說明</h2>
+          <div class="note" id="trDesc"></div>
+          <table id="trStat"></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 時間序列 ============ -->
+<section class="page" id="p-series">
+  <div class="card">
+    <div class="ctl">
+      <label>海域</label><select id="srRegion"></select>
+      <label>顯示</label>
+      <div class="seg" id="srMode">
+        <button data-m="daily" class="on">逐日</button>
+        <button data-m="ano">距平</button>
+        <button data-m="clim">年內變化</button>
+      </div>
+    </div>
+    <canvas id="srCv" height="330"></canvas>
+    <p class="note" id="srNote"></p>
+  </div>
+  <div class="card">
+    <h2>月統計 <small>Monthly statistics</small></h2>
+    <div class="tblwrap"><table id="srTbl"></table></div>
+  </div>
+</section>
+
+<!-- ============ Hovmöller ============ -->
+<section class="page" id="p-hov">
+  <div class="card">
+    <h2>時緯剖面 <small>Time–latitude Hovmöller（緯向平均）</small></h2>
+    <p class="note">縱軸為緯度，橫軸為時間；可看出暖水北抬的年際變化與季節推移的相位漂移。</p>
+    <div class="ctl">
+      <label>資料</label>
+      <div class="seg" id="hovMode"><button data-m="raw" class="on">海溫</button><button data-m="ano">距平</button></div>
+      <label>時間聚合</label>
+      <div class="seg" id="hovAgg"><button data-m="m" class="on">月平均</button><button data-m="p">候（5 日）</button></div>
+    </div>
+    <canvas id="hovCv" height="320"></canvas>
+  </div>
+  <div class="card">
+    <h2>時經剖面 <small>Time–longitude Hovmöller（經向平均）</small></h2>
+    <canvas id="hovCv2" height="320"></canvas>
+  </div>
+</section>
+
+<!-- ============ 年月矩陣 ============ -->
+<section class="page" id="p-mx">
+  <div class="card">
+    <div class="ctl"><label>海域</label><select id="mxRegion"></select></div>
+    <h2>年 × 月 距平矩陣 <small>Year–month anomaly matrix</small></h2>
+    <canvas id="mxCv" height="560"></canvas>
+  </div>
+</section>
+
+<!-- ============ 海洋熱浪 ============ -->
+<section class="page" id="p-mhw">
+  <div class="kpis" id="mhKpi"></div>
+  <div class="card">
+    <div class="ctl"><label>海域</label><select id="mhRegion"></select></div>
+    <h2>海溫、氣候值與熱浪門檻 <small>Hobday et al. (2016)</small></h2>
+    <canvas id="mhCv" height="320"></canvas>
+  </div>
+  <div class="card">
+    <h2>事件清單 <small>Event list（依累積強度排序）</small></h2>
+    <div class="tblwrap"><table id="mhTbl"></table></div>
+  </div>
+</section>
+
+<!-- ============ 方法 ============ -->
+<section class="page" id="p-meth">
+  <div class="card meth" id="methBody"></div>
+</section>
+
+<footer>
+  資料：NOAA OISST v2.1（Huang et al. 2021）／GHRSST MUR L4（JPL MEaSUREs）·
+  經 NOAA CoastWatch ERDDAP 取得 · 分析與視覺化由本頁於瀏覽器端完成 ·
+  <a href="https://github.com/petercttseng-ux/taiwan-ghrsst-longterm">原始碼</a>
+</footer>
+</div>
+
+<script src="js/netcdf.js"></script>
+<script src="js/harvest.js"></script>
+<script src="js/analysis.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
