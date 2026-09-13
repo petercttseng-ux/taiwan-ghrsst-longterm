@@ -18,7 +18,7 @@ fetch_ghrsst.py — 由 NOAA CoastWatch ERDDAP 的 griddap 介面擷取臺灣周
     lon   : float64
 相依：numpy、scipy（scipy.io.netcdf_file 可直接讀 NetCDF-3）
 """
-import argparse, io, os, sys, time, urllib.request, urllib.error
+import argparse, datetime, io, os, sys, time, urllib.request, urllib.error
 import numpy as np
 from scipy.io import netcdf_file
 
@@ -33,20 +33,20 @@ SRC = {
         mirrors=['https://upwell.pfeg.noaa.gov/erddap',
                  'https://oceanwatch.pifsc.noaa.gov/erddap'],
         ds='ncdcOisst21Agg', var='sst', zlev=True, stride=None,
-        lat=(LAT0, LAT1), lon=(LON0, LON1), start='1981-09-01',
+        lat=(LAT0, LAT1), lon=(LON0, LON1), start='1981-09-01', win=366,
         label='NOAA OISST v2.1 (AVHRR-only, 0.25°)'),
     'mur': dict(
         server='https://coastwatch.pfeg.noaa.gov/erddap',
         mirrors=['https://upwell.pfeg.noaa.gov/erddap'],
         ds='jplMURSST41', var='analysed_sst', zlev=False, stride=25,
         # MUR 之 0.01° 格點無法與 0.25° 格心完全重合，取最接近者（偏移 0.005°）
-        lat=(18.13, 31.88), lon=(116.13, 127.88), start='2002-06-01',
+        lat=(18.13, 31.88), lon=(116.13, 127.88), start='2002-06-01', win=30,
         label='GHRSST MUR L4 (JPL, 0.01° -> sampled 0.25°)'),
     'crw': dict(
         server='https://pae-paha.pacioos.hawaii.edu/erddap',
         mirrors=[],
         ds='dhw_5km', var='CRW_SST', zlev=False, stride=5,
-        lat=(LAT0, LAT1), lon=(LON0, LON1), start='1985-04-01',
+        lat=(LAT0, LAT1), lon=(LON0, LON1), start='1985-04-01', win=30,
         label='NOAA Coral Reef Watch CoralTemp v3.1 (5 km)'),
 }
 
@@ -62,7 +62,7 @@ def build_url(server, src, d0, d1):
     return '%s/griddap/%s.nc?%s%s' % (server, s['ds'], s['var'], sel)
 
 
-def get(url, tries=4, timeout=300):
+def get(url, tries=3, timeout=180):
     last = None
     for k in range(tries):
         try:
@@ -72,6 +72,54 @@ def get(url, tries=4, timeout=300):
             last = e
             time.sleep(2 * (k + 1) ** 2)
     raise RuntimeError('下載失敗：%s\n%s' % (url, last))
+
+
+DAY = datetime.timedelta(days=1)
+
+
+def dparse(s):
+    return datetime.date(int(s[:4]), int(s[5:7]), int(s[8:10]))
+
+
+def windows(d0, d1, win):
+    """把 d0–d1 切成固定天數的視窗。跨度過大時 ERDDAP 需開啟數百個逐日檔，
+    常在前端代理逾時前無法回應，故一律小視窗多次請求。"""
+    a, end, out = dparse(d0), dparse(d1), []
+    while a <= end:
+        b = min(a + (win - 1) * DAY, end)
+        out.append((a.isoformat(), b.isoformat()))
+        a = b + DAY
+    return out
+
+
+MIN_WIN = 4
+
+
+def fetch_window(servers, src, d0, d1, depth=0):
+    """取一個時間視窗；失敗時對半切開重試，直到 MIN_WIN 為止。"""
+    last = None
+    for sv in servers:
+        try:
+            return get(build_url(sv, src, d0, d1))
+        except Exception as e:                      # noqa: BLE001
+            last = e
+    span = (dparse(d1) - dparse(d0)).days + 1
+    if span <= MIN_WIN:
+        raise RuntimeError('%s…%s 取得失敗：%s' % (d0, d1, last))
+    mid = (dparse(d0) + (span // 2 - 1) * DAY).isoformat()
+    nxt = (dparse(mid) + DAY).isoformat()
+    print('    %s…%s 失敗，改以 %d 日為單位重試' % (d0, d1, (span + 1) // 2))
+    return [fetch_window(servers, src, d0, mid, depth + 1),
+            fetch_window(servers, src, nxt, d1, depth + 1)]
+
+
+def flatten(x):
+    if isinstance(x, list):
+        out = []
+        for y in x:
+            out.extend(flatten(y))
+        return out
+    return [x]
 
 
 def parse_nc(blob, var):
@@ -121,6 +169,8 @@ def main():
     ap.add_argument('--to', dest='y1', type=int, default=None)
     ap.add_argument('--out', default='raw')
     ap.add_argument('--server', default=None)
+    ap.add_argument('--win', type=int, default=None,
+                    help='每次請求的天數（預設 crw/mur 30、oisst 366）；逾時時可再調小')
     a = ap.parse_args()
 
     s = SRC[a.src]
@@ -136,20 +186,33 @@ def main():
         if os.path.exists(path):
             print('  %d 已存在，略過' % y); continue
         d0 = max('%d-01-01' % y, s['start'])
-        d1 = '%d-12-31' % y
-        blob = None
-        for sv in servers:
+        d1 = min('%d-12-31' % y, time.strftime('%Y-%m-%d', time.gmtime()))
+        if d1 < d0:
+            continue
+        wins = windows(d0, d1, a.win or s.get('win', 30))
+        parts, lat, lon, nfail = [], None, None, 0
+        for (w0, w1) in wins:
             try:
-                blob = get(build_url(sv, a.src, d0, d1)); break
+                blobs = flatten(fetch_window(servers, a.src, w0, w1))
             except Exception as e:                  # noqa: BLE001
-                print('  %d 於 %s 失敗：%s' % (y, sv, e))
-        if blob is None:
-            print('  %d 全部節點皆失敗，跳過' % y); continue
-        t, lat, lon, arr = parse_nc(blob, s['var'])
-        days = np.round(t / 86400.0).astype('int32')
-        np.savez_compressed(path, days=days, vals=quant(arr), lat=lat, lon=lon)
-        print('  %d  %d 日 × %d×%d  → %s (%.1f MB)'
-              % (y, len(days), len(lat), len(lon), path, os.path.getsize(path) / 1048576))
+                print('  %s…%s 放棄：%s' % (w0, w1, e)); nfail += 1; continue
+            for blob in blobs:
+                t, lat, lon, arr = parse_nc(blob, s['var'])
+                parts.append((np.round(t / 86400.0).astype('int32'), quant(arr)))
+            print('    %s…%s ✓' % (w0, w1))
+        if not parts:
+            print('  %d 完全無法取得，跳過' % y); continue
+        days = np.concatenate([p[0] for p in parts])
+        vals = np.concatenate([p[1] for p in parts], axis=0)
+        order = np.argsort(days, kind='stable')
+        days, vals = days[order], vals[order]
+        keep = np.concatenate(([True], np.diff(days) != 0))   # 去除邊界重複日
+        days, vals = days[keep], vals[keep]
+        np.savez_compressed(path, days=days, vals=vals, lat=lat, lon=lon)
+        print('  %d  %d 日 × %d×%d%s  → %s (%.1f MB)'
+              % (y, len(days), len(lat), len(lon),
+                 ('  [%d 段未取得]' % nfail) if nfail else '',
+                 path, os.path.getsize(path) / 1048576))
     print('完成。')
 
 
