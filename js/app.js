@@ -261,7 +261,9 @@ function drawKpi() {
   $('#ovKpi').innerHTML = [
     kpi('資料期間', S.meta.t0.slice(0, 7) + ' – ' + S.meta.t1.slice(0, 7), S.meta.nday.toLocaleString() + ' 日 · ' + S.meta.srcLabel, 'acc'),
     kpi('全域升溫速率', (ts.slope * 10 >= 0 ? '+' : '') + fmt(ts.slope * 10, 3), '°C / 10 年' + (ts.p < 0.05 ? ' · 顯著 (p<0.05)' : ''), 'warm'),
-    kpi('最暖年', String(ok[0][1]), fmt(ok[0][0], 2) + ' °C（次暖 ' + ok[1][1] + '）', 'warm'),
+    kpi('最暖年', ok.length ? String(ok[0][1]) : '—',
+        ok.length ? (fmt(ok[0][0], 2) + ' °C' + (ok.length > 1 ? '（次暖 ' + ok[1][1] + '）' : '')) : '年份不足',
+        'warm'),
     kpi('年熱浪日數', fmt(late, 0), '後半期；前半期 ' + fmt(early, 0) + ' 日（×' + fmt(late / Math.max(0.5, early), 1) + '）', 'warm'),
     kpi('氣候基期', S.meta.base[0] + '–' + S.meta.base[1], '30 年 · 符合 WMO 標準', 'acc'),
     kpi('最強熱浪事件', top ? top.s.slice(0, 7) : '—', top ? (top.dur + ' 日 · 峰值 +' + fmt(top.imax, 2) + ' °C') : '', 'warm')
@@ -271,7 +273,7 @@ function drawKpi() {
   $('#mhKpi').innerHTML = [
     kpi('事件總數', String(ev.length), '全域面積平均序列', 'acc'),
     kpi('總熱浪日數', totD.toLocaleString(), '占全期 ' + fmt(totD / S.meta.nday * 100, 1) + ' %', 'warm'),
-    kpi('最長事件', String(Math.max.apply(null, ev.map(function (e) { return e.dur; }) )) + ' 日', '', 'warm'),
+    kpi('最長事件', (ev.length ? Math.max.apply(null, ev.map(function (e) { return e.dur; })) : 0) + ' 日', '', 'warm'),
     kpi('第 IV 級事件', String(ev.filter(function (e) { return e.cat >= 4; }).length), 'Hobday et al. (2018) 分級', 'warm')
   ].join('');
 }
