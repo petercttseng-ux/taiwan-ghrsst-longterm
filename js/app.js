@@ -809,10 +809,23 @@ function build() {
     from: yFrom ? yFrom + '-01-01' : undefined,
     to: yTo ? yTo + '-12-31' : undefined
   }, function (p) {
-    prog(p.done / p.total * 0.62, '擷取 ' + p.label + '（' + p.done + '/' + p.total + '）');
+    if (p.phase === 'note') { log('… ' + p.note, 'warn'); return; }
+    if (p.phase === 'range') {
+      log('　擷取區間 ' + p.t0 + ' – ' + p.t1 + '（已依資料集實際範圍裁切），' +
+          '分 ' + p.total + ' 段、每段 ' + p.win + ' 日');
+      return;
+    }
+    prog(p.done / p.total * 0.62, '擷取 ' + p.label + '（' + p.done + '/' + p.total + ' 段）');
   }).then(function (D) {
-    log('✓ 擷取完成：' + D.nday.toLocaleString() + ' 日 × ' + D.ncell + ' 格（' +
-        ((Date.now() - t0) / 1000).toFixed(0) + ' 秒）', 'ok');
+    var nOk = 0;
+    for (var i = 0; i < D.have.length; i++) if (D.have[i]) nOk++;
+    log('✓ 擷取完成：' + D.nday.toLocaleString() + ' 日曆日（實得 ' + nOk.toLocaleString() +
+        ' 日）× ' + D.ncell + ' 格（' + ((Date.now() - t0) / 1000).toFixed(0) + ' 秒）', 'ok');
+    if (D.failed && D.failed.length) {
+      log('⚠ 有 ' + D.failed.length + ' 個時段最終未取得，已視為無資料繼續分析：' +
+          D.failed.slice(0, 5).map(function (f) { return f.a + '…' + f.b; }).join('、') +
+          (D.failed.length > 5 ? ' 等' : '') + '。可稍後再按「開始建置」續補（已取得的段落會由快取讀回）。', 'warn');
+    }
     return analyse(D, base, srcKey);
   }).then(function () {
     log('✓ 全部完成，共 ' + ((Date.now() - t0) / 1000).toFixed(0) + ' 秒。', 'ok');
@@ -822,6 +835,10 @@ function build() {
     go('ov');
   }).catch(function (e) {
     log('✗ 建置失敗：' + (e && e.message ? e.message : e), 'err');
+    log('「Failed to fetch」代表瀏覽器連回應都讀不到，最常見的兩個原因是：' +
+        '(1) 該節點對此請求逾時，其代理回傳的錯誤頁不帶 CORS 標頭；' +
+        '(2) 所在網路封鎖了該節點。本頁已改以小時間視窗請求並自動對半重試；' +
+        '若仍持續失敗，請改選另一個資料來源，或走 Python 路徑。', 'err');
     $('#btnBuild').disabled = false;
   });
 }

@@ -23,6 +23,7 @@
       v: 'CRW_SST',
       zlev: false,
       stride: 5,                 // 0.05° → 每 5 格取樣為 0.25°（格點恰好對齊）
+      win: 30,                   // 每次請求的天數：CoralTemp 為逐日檔，跨度過大會逾時
       start: '1985-04-01',
       label: 'NOAA Coral Reef Watch CoralTemp v3.1（5 km 逐日，1985– ）',
       cite: 'NOAA Coral Reef Watch (2018, updated). Daily Global 5km Satellite SST (CoralTemp v3.1).'
@@ -34,6 +35,7 @@
       v: 'sst',
       zlev: true,
       stride: null,              // 原生即 0.25°
+      win: 180,                  // 單一聚合檔，跨度可較大
       start: '2020-02-28',       // NCEI ERDDAP 僅提供滾動視窗，非全記錄
       label: 'NOAA OISST v2.1（0.25° 逐日，近 6 年，供交叉檢核）',
       cite: 'Huang, B. et al. (2021). DOISST v2.1. J. Climate 34, 2923–2939.'
@@ -106,17 +108,37 @@
   function serverOf(src) { return override || src.server; }
   function url(src, path) { return serverOf(src) + '/griddap/' + src.ds + path; }
 
+  var TIMEOUT_MS = 100000;   // 單次請求上限；ERDDAP 前端代理通常在 60–120 秒切斷連線
+
+  /* 逾時中止的 fetch。ERDDAP 前端代理逾時所送出的 502／504 錯誤頁不帶 CORS 標頭，
+     瀏覽器一律以 TypeError: Failed to fetch 呈現，因此必須自行設上限並縮小請求。 */
+  function fetchOnce(u) {
+    var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, TIMEOUT_MS) : null;
+    var opt = { credentials: 'omit', cache: 'no-store' };
+    if (ctl) opt.signal = ctl.signal;
+    return fetch(u, opt).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.arrayBuffer();
+    }).then(function (b) {
+      if (timer) clearTimeout(timer);
+      return b;
+    }, function (e) {
+      if (timer) clearTimeout(timer);
+      var m = (e && e.name === 'AbortError') ? '逾時 ' + (TIMEOUT_MS / 1000) + ' 秒'
+            : (e && e.message) ? e.message : String(e);
+      throw new Error(m);
+    });
+  }
+
   function fetchBuf(u, tries) {
-    tries = tries || 4;
+    tries = tries || 2;
     var attempt = 0;
     function go() {
       attempt++;
-      return fetch(u, { credentials: 'omit', cache: 'no-store' }).then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.arrayBuffer();
-      }).catch(function (e) {
+      return fetchOnce(u).catch(function (e) {
         if (attempt >= tries) throw e;
-        return new Promise(function (res) { setTimeout(res, 1500 * attempt * attempt); }).then(go);
+        return new Promise(function (res) { setTimeout(res, 1200 * attempt); }).then(go);
       });
     }
     return go();
@@ -190,39 +212,92 @@
     });
   }
 
-  /* 逐年擷取整段記錄，支援續傳。onProg({done,total,label,bytes}) */
+  /* 切出固定天數的時間視窗。跨度太大時 ERDDAP 須開啟數百個逐日檔，
+     常在前端代理逾時前無法回應，因此以小視窗多次請求換取穩定度與可續傳性。 */
+  function windows(t0, t1, win) {
+    var a = mkDate(t0), end = mkDate(t1), out = [];
+    while (a <= end) {
+      var b = addDays(a, win - 1);
+      if (b > end) b = end;
+      out.push([ymd(a), ymd(b)]);
+      a = addDays(b, 1);
+    }
+    return out;
+  }
+
+  var MIN_WIN = 4;   // 再小就沒有意義；若連 4 日都取不到即為真正的連線問題
+
+  /* 取一個視窗；失敗時對半切開重試，直到 MIN_WIN 為止。 */
+  function fetchWindow(src, a, b, onNote) {
+    return fetchChunk(src, a, b).catch(function (e) {
+      var da = dayNo(mkDate(a)), db = dayNo(mkDate(b)), span = db - da + 1;
+      if (span <= MIN_WIN) throw new Error(a + '…' + b + '：' + e.message);
+      var mid = ymd(addDays(mkDate(a), Math.floor(span / 2) - 1));
+      var nxt = ymd(addDays(mkDate(mid), 1));
+      if (onNote) onNote(a + '…' + b + ' 失敗（' + e.message + '），改以 ' +
+                         Math.ceil(span / 2) + ' 日為單位重試');
+      return fetchWindow(src, a, mid, onNote).then(function (c1) {
+        return fetchWindow(src, nxt, b, onNote).then(function (c2) { return mergeChunks(c1, c2); });
+      });
+    });
+  }
+
+  function mergeChunks(c1, c2) {
+    var ncell = c1.nlat * c1.nlon;
+    var days = new Int32Array(c1.days.length + c2.days.length);
+    days.set(c1.days, 0); days.set(c2.days, c1.days.length);
+    var vals = new Int16Array(days.length * ncell);
+    vals.set(c1.vals, 0); vals.set(c2.vals, c1.vals.length);
+    return { days: days, vals: vals, nlat: c1.nlat, nlon: c1.nlon, lat0: c1.lat0, lon0: c1.lon0 };
+  }
+
+  /* 依時間視窗擷取整段記錄，支援續傳與部分失敗。onProg({done,total,label,phase,note}) */
   function harvest(srcKey, opts, onProg) {
     opts = opts || {};
     var src = SRC[srcKey];
-    var state = { chunks: [], nlat: 0, nlon: 0 };
+    var conc = opts.concurrency || 2;
+    var state = { chunks: [], nlat: 0, nlon: 0, failed: [] };
     return timeRange(src).then(function (tr) {
-      var y0 = parseInt((opts.from || tr.t0).slice(0, 4), 10);
-      var y1 = parseInt((opts.to || tr.t1).slice(0, 4), 10);
-      var years = [];
-      for (var y = y0; y <= y1; y++) years.push(y);
-      var i = 0, t0 = (opts.from || tr.t0).slice(0, 10), t1 = (opts.to || tr.t1).slice(0, 10);
+      var t0 = (opts.from || tr.t0).slice(0, 10), t1 = (opts.to || tr.t1).slice(0, 10);
+      if (t0 < src.start) t0 = src.start;
+      if (t1 > tr.t1.slice(0, 10)) t1 = tr.t1.slice(0, 10);
+      var win = opts.win || src.win || 30;
+      var ws = windows(t0, t1, win);
+      var total = ws.length, done = 0, next = 0;
+      if (onProg) onProg({ done: 0, total: total, phase: 'range', t0: t0, t1: t1, win: win,
+                           label: t0 + ' – ' + t1 });
 
-      function step() {
-        if (i >= years.length) return Promise.resolve(state);
-        var y = years[i];
-        var a = (y === y0) ? t0 : (y + '-01-01');
-        var b = (y === y1) ? t1 : (y + '-12-31');
-        var key = srcKey + '|' + y + '|' + a + '|' + b;
-        if (onProg) onProg({ done: i, total: years.length, label: y + ' 年', phase: 'fetch' });
+      function note(m) { if (onProg) onProg({ done: done, total: total, label: m, phase: 'note', note: m }); }
+
+      function one() {
+        if (next >= total) return Promise.resolve();
+        var idx = next++, a = ws[idx][0], b = ws[idx][1];
+        var key = srcKey + '|' + a + '|' + b;
         return idbGet(key).then(function (hit) {
-          if (hit && hit.vals) return hit;
-          return fetchChunk(src, a, b).then(function (c) {
-            return idbPut(key, c).then(function () { return c; });
+          if (hit && hit.vals && hit.days) return hit;
+          return fetchWindow(src, a, b, note).then(function (c) {
+            return idbPut(key, c).then(function () { return c; }, function () { return c; });
           });
         }).then(function (c) {
           state.chunks.push(c); state.nlat = c.nlat; state.nlon = c.nlon;
-          i++;
-          return new Promise(function (r) { setTimeout(r, 30); }).then(step);
+        }, function (e) {
+          // 單一視窗徹底失敗不中止整體建置；缺漏日期在統計中會被視為無資料
+          state.failed.push({ a: a, b: b, msg: e.message });
+          note('✗ ' + e.message);
+        }).then(function () {
+          done++;
+          if (onProg) onProg({ done: done, total: total, label: a.slice(0, 7), phase: 'fetch' });
+          return new Promise(function (r) { setTimeout(r, 40); }).then(one);
         });
       }
-      return step().then(function () {
-        if (onProg) onProg({ done: years.length, total: years.length, label: '完成', phase: 'fetch' });
-        return assemble(state);
+
+      var lanes = [];
+      for (var q = 0; q < Math.max(1, conc); q++) lanes.push(one());
+      return Promise.all(lanes).then(function () {
+        if (onProg) onProg({ done: total, total: total, label: '完成', phase: 'fetch' });
+        var D = assemble(state);
+        D.failed = state.failed;
+        return D;
       });
     });
   }
