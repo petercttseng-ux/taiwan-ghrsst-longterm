@@ -16,7 +16,7 @@
 ## 這個儲存庫有什麼不一樣
 
 **它不隨附海溫資料。** 儀表板本身內建擷取引擎：開啟頁面後按「開始建置」，
-瀏覽器會直接向 NOAA CoastWatch 的 **ERDDAP griddap** 介面請求本範圍的 NetCDF 次集，
+瀏覽器會直接向 **ERDDAP griddap** 介面請求本範圍的 NetCDF 次集，
 在瀏覽器內完成全部統計運算，並快取於 IndexedDB。第一次約 10–25 分鐘，之後開啟只需數秒。
 
 這樣設計有三個理由：
@@ -31,14 +31,27 @@
 
 ## 資料來源 Data
 
-| 產品 | 解析度 | 期間 | 用途 |
-|---|---|---|---|
-| **NOAA OISST v2.1**（`ncdcOisst21Agg`） | 0.25°，每日 | 1981-09 迄今 | 主要長期記錄：氣候基期、趨勢、海洋熱浪 |
-| **GHRSST MUR L4**（`jplMURSST41mday`） | 0.01°（取樣 0.05°），每月 | 2002-06 迄今 | 高解析空間結構與交叉檢核 |
+| 產品 | 解析度 | 期間 | 路徑 | 用途 |
+|---|---|---|---|---|
+| **NOAA Coral Reef Watch CoralTemp v3.1**（`dhw_5km` @ PacIOOS） | 5 km，每日 | 1985-04 迄今 | 瀏覽器／Python | **主要長期記錄** |
+| **NOAA OISST v2.1**（`ncdc_oisst_v2_avhrr…` @ NCEI） | 0.25°，每日 | 約 2020 迄今（滾動視窗） | 瀏覽器 | 交叉檢核 |
+| **NOAA OISST v2.1**（`ncdcOisst21Agg` @ CoastWatch） | 0.25°，每日 | 1981-09 迄今 | 僅 Python | 全記錄 |
+| **GHRSST MUR L4**（`jplMURSST41` @ CoastWatch） | 0.01°，每日 | 2002-06 迄今 | 僅 Python | OVL 圖層之底層產品 |
 
-MUR L4 即 OVL 檢視器上 `GIBS_GHRSST_L4_MUR_Sea_Surface_Temperature` 圖層的底層產品；
-OISST 則是國際海洋熱浪研究（含 Hobday 等人原始定義文獻）的標準資料集，且原生網格恰為 0.25°，
-與水試所每日衛星海面水溫圖的圖幅完全對齊，不需重取樣。
+### 為什麼瀏覽器端用的不是 MUR
+
+OceanDataLab OVL 上的 `GIBS_GHRSST_L4_MUR_Sea_Surface_Temperature` 圖層，底層就是 JPL 的 GHRSST MUR L4。
+該產品在 ERDDAP 上由 NOAA CoastWatch 提供，但**經實測，CoastWatch、upwell、PIFSC、PolarWatch、OSMC
+等 NOAA 節點皆未送出 `Access-Control-Allow-Origin` 標頭**，瀏覽器因同源政策無法讀取其回應
+（`no-cors` 請求可通、`cors` 請求失敗，證實是標頭而非網路阻擋）。
+
+因此本專案採雙軌設計：
+
+* **瀏覽器路徑**用有送 CORS 的節點 —— PacIOOS 的 CoralTemp（5 km、1985 年起，公開節點中唯一同時具備
+  長記錄與 CORS 者）與 NCEI 的 OISST。
+* **伺服器路徑**（`tools/fetch_ghrsst.py`）不受同源政策限制，可直接取用 MUR L4 與 OISST 全記錄。
+
+兩條路徑輸出格式與演算法完全相同，結果可互相驗證。
 
 ## 分析內容 Features
 
@@ -63,6 +76,7 @@ OISST 則是國際海洋熱浪研究（含 Hobday 等人原始定義文獻）的
 | 海洋熱浪 | 連續 ≥5 日超過日序 90 百分位；間隔 ≤2 日合併；分級依 Hobday et al. (2018) |
 | 趨勢 | 年平均（有效日數 >300）之 Theil–Sen 中位斜率 + Mann–Kendall 檢定 |
 | 區域平均 | cos(緯度) 面積加權 |
+| 網格對齊 | CoralTemp 之 0.05° 格點與 0.25° 格心恰好重合，以每 5 格取樣（非區塊平均）取值 |
 | 資料編碼 | `int16`，溫度 ×100，`-32768` 表無資料 |
 
 JavaScript 與 Python 兩條路徑實作同一組定義，其核心函式已對 `numpy`／`scipy` 參考值驗證：
@@ -75,8 +89,10 @@ JavaScript 與 Python 兩條路徑實作同一組定義，其核心函式已對 
 
 ```bash
 pip install numpy scipy
-python3 tools/fetch_ghrsst.py --src oisst --from 1982 --to 2026 --out raw/
-python3 tools/build_ghrsst.py --raw raw/ --base 1991 2020 --out data/
+python3 tools/fetch_ghrsst.py --src crw   --from 1985 --to 2026 --out raw/   # CoralTemp 5 km
+python3 tools/fetch_ghrsst.py --src oisst --from 1982 --to 2026 --out raw/   # OISST 全記錄
+python3 tools/fetch_ghrsst.py --src mur   --from 2002 --to 2026 --out raw/   # GHRSST MUR L4
+python3 tools/build_ghrsst.py --raw raw/ --src crw --base 1991 2020 --out data/
 ```
 
 產出的 `data/analysis.json` 放回本目錄，儀表板即會直接載入而略過建置步驟
@@ -100,14 +116,17 @@ tools/build_ghrsst.py   Python 版統計與資料檔產製
 
 ## 已知限制 Limitations
 
-- OISST 與 MUR 皆為 **L4 分析場**（內插／融合產品），非直接觀測；雲量高的期間倚賴背景場與現場資料。
-- 0.25° 約 25 km，**無法解析**臺灣海峽內的中小尺度鋒面、上升流與潮汐混合帶。
+- CoralTemp、OISST 與 MUR 皆為 **L4 分析場**（內插／融合產品），非直接觀測；雲量高的期間倚賴背景場與現場資料。
+- 取樣至 0.25°（約 25 km），**無法解析**臺灣海峽內的中小尺度鋒面、上升流與潮汐混合帶；CoralTemp 原生為 5 km，如需該尺度可改以全解析度擷取。
+- CoralTemp 以**取樣**而非區塊平均降至 0.25°，在梯度劇烈的近岸與鋒面帶與平均值可能有數十分之一度的差異。
+- CoralTemp 1985–2002 段與 2002 年後的輸入來源不同（Pathfinder／OSTIA 重分析 vs. Geo-Polar Blended），跨越該接點的趨勢應審慎解讀。
 - 局部升溫速率同時包含全球暖化訊號與環流位移（如黑潮路徑變動）造成的重新分配，兩者未分離。
 - 熱浪統計以**固定基期**定義，暖化本身會使近年超標日數自然增加；與採移動基期的研究不可直接比較。
 - OISST 最近數週屬 preliminary 版，日後會由 final 版取代，數值可能微調。
 
 ## 引用 Citation
 
+- NOAA Coral Reef Watch (2018, updated daily). NOAA Coral Reef Watch Daily Global 5km Satellite Sea Surface Temperature (CoralTemp v3.1). College Park, Maryland, USA: NOAA Coral Reef Watch.
 - Huang, B. et al. (2021). Improvements of the Daily Optimum Interpolation Sea Surface Temperature (DOISST) Version 2.1. *J. Climate*, 34, 2923–2939. doi:10.1175/JCLI-D-20-0166.1
 - JPL MUR MEaSUREs Project (2015). GHRSST Level 4 MUR Global Foundation SST Analysis. PO.DAAC. doi:10.5067/GHGMR-4FJ04
 - Hobday, A. J. et al. (2016). A hierarchical approach to defining marine heatwaves. *Prog. Oceanogr.*, 141, 227–238.

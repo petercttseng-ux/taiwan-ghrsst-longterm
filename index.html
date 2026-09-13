@@ -19,7 +19,7 @@
   <div class="sub">
     Taiwan Seas Long-term SST Dynamics ·
     範圍 <b>116–128°E, 18–32°N</b> · 網格 <b>0.25°</b> ·
-    資料 <b id="hdSrc">NOAA OISST v2.1 / GHRSST MUR L4</b> ·
+    資料 <b id="hdSrc">CoralTemp v3.1 / OISST v2.1 / GHRSST MUR L4</b> ·
     期間 <b id="hdPeriod">—</b>
   </div>
 </header>
@@ -45,23 +45,24 @@
   <div class="card">
     <h2>資料建置 <small>Data build — 於您的瀏覽器直接向 ERDDAP 擷取，不經任何中介伺服器</small></h2>
     <p class="note">
-      本儀表板不隨附預先下載的海溫資料。按下「開始建置」後，頁面會直接向 NOAA ERDDAP 的
+      本儀表板不隨附預先下載的海溫資料。按下「開始建置」後，頁面會直接向 ERDDAP 的
       <code>griddap</code> 介面請求 116–128°E、18–32°N 範圍的每日網格 SST（NetCDF 次集），
       在瀏覽器內完成氣候基期、趨勢與海洋熱浪的全部運算，並快取於本機 IndexedDB。
       第一次約需 10–25 分鐘（視網路而定），之後開啟只需數秒。
+      預設來源為 <b>NOAA Coral Reef Watch CoralTemp v3.1</b>（5 km 逐日，1985 年起，共四十一年），
+      經 PacIOOS ERDDAP 取得 —— 這是目前公開節點中唯一同時具備長記錄與 CORS 支援者。
     </p>
 
     <div class="ctl">
       <label>資料來源</label>
       <div class="seg" id="srcSeg">
-        <button data-s="oisst" class="on">NOAA OISST v2.1（0.25°，1981– ）</button>
-        <button data-s="mur">GHRSST MUR L4 月平均（0.05°，2002– ）</button>
+        <button data-s="crw" class="on">CoralTemp v3.1（5 km，1985– ）</button>
+        <button data-s="oisst">OISST v2.1（0.25°，2020– ）</button>
       </div>
-      <label>ERDDAP 節點</label>
-      <select id="mirrorSel"></select>
+      <label>ERDDAP 節點</label><span class="mono" id="srvTxt">—</span>
     </div>
     <div class="ctl">
-      <label>起始年</label><input type="text" id="yFrom" value="1982" size="5">
+      <label>起始年</label><input type="text" id="yFrom" value="1985" size="5">
       <label>結束年</label><input type="text" id="yTo" value="" size="5" placeholder="最新">
       <label>氣候基期</label><input type="text" id="baseFrom" value="1991" size="5">–<input type="text" id="baseTo" value="2020" size="5">
       <button class="btn" id="btnBuild">開始建置</button>
@@ -80,13 +81,18 @@
   <div class="card">
     <h2>沒有網路存取權時 <small>Offline / server-side route</small></h2>
     <p class="note">
-      若您的環境無法直接連到 ERDDAP（例如受機關防火牆限制），可改在有網路的機器上執行
+      伺服器端路徑不受瀏覽器同源政策限制，因此可取用<b>未提供 CORS 標頭的 NOAA 節點</b>
+      —— 包括 <b>GHRSST MUR L4</b> 與 <b>OISST v2.1 的 1981 年起全記錄</b>。
+      若您的環境無法直接連到 ERDDAP（例如受機關防火牆限制），同樣改在有網路的機器上執行
       <code>tools/fetch_ghrsst.py</code> 與 <code>tools/build_ghrsst.py</code>，
       產出與瀏覽器版完全相同的 <code>data/</code> 資料檔後放回本目錄，本頁即會直接載入而略過建置步驟。
       兩條路徑使用同一套演算法定義（氣候基期視窗、Hobday 熱浪判準、Theil–Sen 趨勢），結果可互相驗證。
     </p>
-<pre class="code">python3 tools/fetch_ghrsst.py --src oisst --from 1982 --to 2026 --out raw/
-python3 tools/build_ghrsst.py --raw raw/ --base 1991 2020 --out data/</pre>
+<pre class="code"># GHRSST MUR L4（OVL 圖層之底層產品）或 OISST v2.1 全記錄，伺服器端不受 CORS 限制
+python3 tools/fetch_ghrsst.py --src mur   --from 2002 --to 2026 --out raw/
+python3 tools/fetch_ghrsst.py --src oisst --from 1982 --to 2026 --out raw/
+python3 tools/fetch_ghrsst.py --src crw   --from 1985 --to 2026 --out raw/
+python3 tools/build_ghrsst.py --raw raw/ --src oisst --base 1991 2020 --out data/</pre>
   </div>
 </section>
 
@@ -241,8 +247,9 @@ python3 tools/build_ghrsst.py --raw raw/ --base 1991 2020 --out data/</pre>
 </section>
 
 <footer>
-  資料：NOAA OISST v2.1（Huang et al. 2021）／GHRSST MUR L4（JPL MEaSUREs）·
-  經 NOAA CoastWatch ERDDAP 取得 · 分析與視覺化由本頁於瀏覽器端完成 ·
+  資料：NOAA Coral Reef Watch CoralTemp v3.1 · NOAA OISST v2.1（Huang et al. 2021）·
+  GHRSST MUR L4（JPL MEaSUREs，伺服器端路徑）· 經 ERDDAP griddap 取得 ·
+  分析與視覺化由本頁於瀏覽器端完成 ·
   <a href="https://github.com/petercttseng-ux/taiwan-ghrsst-longterm">原始碼</a>
 </footer>
 </div>
