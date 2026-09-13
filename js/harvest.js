@@ -144,26 +144,48 @@
     return go();
   }
 
-  /* 取得資料集的時間範圍（回傳 ISO 字串） */
+  /* 取得資料集的時間範圍（回傳 ISO 字串）。先試 .json，再退回 .das，皆有重試。 */
   function timeRange(src) {
     var u = url(src, '.json?time%5B0:1:0%5D,time%5Blast%5D');
-    return fetch(u, { credentials: 'omit' }).then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    }).then(function (j) {
-      var rows = j.table.rows, vals = [];
+    return fetchText(u, 3).then(function (txt) {
+      var j = JSON.parse(txt), rows = j.table.rows, vals = [];
       for (var i = 0; i < rows.length; i++) vals.push(rows[i][0]);
       vals.sort();
+      if (!vals.length) throw new Error('時間軸為空');
       return { t0: vals[0], t1: vals[vals.length - 1] };
     }).catch(function () {
       // 退而求其次：由 .das 解析
-      return fetch(url(src, '.das'), { credentials: 'omit' }).then(function (r) { return r.text(); })
-        .then(function (t) {
-          var a = /time_coverage_start\s+"([^"]+)"/.exec(t);
-          var b = /time_coverage_end\s+"([^"]+)"/.exec(t);
-          return { t0: a ? a[1] : src.start, t1: b ? b[1] : ymd(new Date()) };
-        });
+      return fetchText(url(src, '.das'), 3).then(function (t) {
+        var a = /time_coverage_start\s+"([^"]+)"/.exec(t);
+        var b = /time_coverage_end\s+"([^"]+)"/.exec(t);
+        if (!a && !b) throw new Error('.das 無時間範圍');
+        return { t0: a ? a[1] : src.start, t1: b ? b[1] : ymd(new Date()) };
+      });
     });
+  }
+
+  function fetchText(u, tries) {
+    tries = tries || 3;
+    var attempt = 0;
+    function go() {
+      attempt++;
+      var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      var timer = ctl ? setTimeout(function () { ctl.abort(); }, 45000) : null;
+      var opt = { credentials: 'omit', cache: 'no-store' };
+      if (ctl) opt.signal = ctl.signal;
+      return fetch(u, opt).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      }).then(function (t) { if (timer) clearTimeout(timer); return t; },
+        function (e) {
+          if (timer) clearTimeout(timer);
+          if (attempt >= tries) {
+            throw new Error(e && e.name === 'AbortError' ? '逾時 45 秒' : ((e && e.message) || String(e)));
+          }
+          return new Promise(function (res) { setTimeout(res, 1500 * attempt); }).then(go);
+        });
+    }
+    return go();
   }
 
   /* 組出一段期間的 .nc 次集 URL。
@@ -256,8 +278,16 @@
     opts = opts || {};
     var src = SRC[srcKey];
     var conc = opts.concurrency || 2;
-    var state = { chunks: [], nlat: 0, nlon: 0, failed: [] };
-    return timeRange(src).then(function (tr) {
+    var state = { chunks: [], nlat: 0, nlon: 0, failed: [], aborted: false, rangeGuessed: false };
+    return timeRange(src).catch(function (e) {
+      // 取不到時間軸不應中止整個建置：改用來源內建的起始日與今日，
+      // 讓後續逐段擷取自行回報成敗，錯誤訊息才有診斷價值。
+      state.rangeGuessed = true;
+      if (onProg) onProg({ done: 0, total: 0, phase: 'note', label: '',
+        note: '無法取得資料集時間範圍（' + e.message + '），改用內建預設範圍 ' +
+              src.start + ' – 今日 繼續嘗試' });
+      return { t0: src.start, t1: ymd(new Date()) };
+    }).then(function (tr) {
       var t0 = (opts.from || tr.t0).slice(0, 10), t1 = (opts.to || tr.t1).slice(0, 10);
       if (t0 < src.start) t0 = src.start;
       if (t1 > tr.t1.slice(0, 10)) t1 = tr.t1.slice(0, 10);
@@ -265,12 +295,16 @@
       var ws = windows(t0, t1, win);
       var total = ws.length, done = 0, next = 0;
       if (onProg) onProg({ done: 0, total: total, phase: 'range', t0: t0, t1: t1, win: win,
-                           label: t0 + ' – ' + t1 });
+                           guessed: state.rangeGuessed, label: t0 + ' – ' + t1 });
 
       function note(m) { if (onProg) onProg({ done: done, total: total, label: m, phase: 'note', note: m }); }
 
+      // 連續失敗多次代表節點已不可用（封鎖、限流或離線），
+      // 與其硬跑完 505 段，不如及早停下並保留已取得的段落。
+      var GIVE_UP = 8, consec = 0, pace = 40;
+
       function one() {
-        if (next >= total) return Promise.resolve();
+        if (next >= total || state.aborted) return Promise.resolve();
         var idx = next++, a = ws[idx][0], b = ws[idx][1];
         var key = srcKey + '|' + a + '|' + b;
         return idbGet(key).then(function (hit) {
@@ -280,14 +314,22 @@
           });
         }).then(function (c) {
           state.chunks.push(c); state.nlat = c.nlat; state.nlon = c.nlon;
+          consec = 0; pace = 40;
         }, function (e) {
           // 單一視窗徹底失敗不中止整體建置；缺漏日期在統計中會被視為無資料
           state.failed.push({ a: a, b: b, msg: e.message });
-          note('✗ ' + e.message);
+          note('✗ ' + a + '…' + b + '：' + e.message);
+          consec++;
+          pace = Math.min(8000, pace * 3);   // 失敗後放慢，避免持續衝撞限流
+          if (consec >= GIVE_UP) {
+            state.aborted = true;
+            note('連續 ' + GIVE_UP + ' 段失敗，判定節點目前不可用，已停止擷取；' +
+                 '已取得的段落都留在快取，稍後再按一次「開始建置」即可續傳。');
+          }
         }).then(function () {
           done++;
           if (onProg) onProg({ done: done, total: total, label: a.slice(0, 7), phase: 'fetch' });
-          return new Promise(function (r) { setTimeout(r, 40); }).then(one);
+          return new Promise(function (r) { setTimeout(r, pace); }).then(one);
         });
       }
 
@@ -295,8 +337,14 @@
       for (var q = 0; q < Math.max(1, conc); q++) lanes.push(one());
       return Promise.all(lanes).then(function () {
         if (onProg) onProg({ done: total, total: total, label: '完成', phase: 'fetch' });
+        if (!state.chunks.length) {
+          throw new Error('一段資料都沒取到（共 ' + state.failed.length + ' 段失敗）。' +
+            (state.failed.length ? '第一段的錯誤是：' + state.failed[0].msg : ''));
+        }
         var D = assemble(state);
         D.failed = state.failed;
+        D.aborted = state.aborted;
+        D.total = total;
         return D;
       });
     });

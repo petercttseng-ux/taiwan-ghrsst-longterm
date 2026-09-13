@@ -813,8 +813,9 @@ function build() {
   }, function (p) {
     if (p.phase === 'note') { log('… ' + p.note, 'warn'); return; }
     if (p.phase === 'range') {
-      log('　擷取區間 ' + p.t0 + ' – ' + p.t1 + '（已依資料集實際範圍裁切），' +
-          '分 ' + p.total + ' 段、每段 ' + p.win + ' 日');
+      log('　擷取區間 ' + p.t0 + ' – ' + p.t1 +
+          (p.guessed ? '（<b>未能向節點確認</b>，使用內建預設範圍）' : '（已依資料集實際範圍裁切）') +
+          '，分 ' + p.total + ' 段、每段 ' + p.win + ' 日');
       return;
     }
     prog(p.done / p.total * 0.62, '擷取 ' + p.label + '（' + p.done + '/' + p.total + ' 段）');
@@ -823,7 +824,11 @@ function build() {
     for (var i = 0; i < D.have.length; i++) if (D.have[i]) nOk++;
     log('✓ 擷取完成：' + D.nday.toLocaleString() + ' 日曆日（實得 ' + nOk.toLocaleString() +
         ' 日）× ' + D.ncell + ' 格（' + ((Date.now() - t0) / 1000).toFixed(0) + ' 秒）', 'ok');
-    if (D.failed && D.failed.length) {
+    if (D.aborted) {
+      log('⚠ 擷取<b>提前停止</b>（連續多段失敗）。已取得 ' + (D.total - D.failed.length) +
+          '/' + D.total + ' 段，先以現有資料完成分析；' +
+          '節點恢復後再按一次「開始建置」即可續傳，已取得的段落會由快取直接讀回。', 'warn');
+    } else if (D.failed && D.failed.length) {
       log('⚠ 有 ' + D.failed.length + ' 個時段最終未取得，已視為無資料繼續分析：' +
           D.failed.slice(0, 5).map(function (f) { return f.a + '…' + f.b; }).join('、') +
           (D.failed.length > 5 ? ' 等' : '') + '。可稍後再按「開始建置」續補（已取得的段落會由快取讀回）。', 'warn');
@@ -837,10 +842,11 @@ function build() {
     go('ov');
   }).catch(function (e) {
     log('✗ 建置失敗：' + (e && e.message ? e.message : e), 'err');
-    log('「Failed to fetch」代表瀏覽器連回應都讀不到，最常見的兩個原因是：' +
-        '(1) 該節點對此請求逾時，其代理回傳的錯誤頁不帶 CORS 標頭；' +
-        '(2) 所在網路封鎖了該節點。本頁已改以小時間視窗請求並自動對半重試；' +
-        '若仍持續失敗，請改選另一個資料來源，或走 Python 路徑。', 'err');
+    log('若上方每一段都寫著 <b>Failed to fetch</b>，代表瀏覽器連回應都讀不到，' +
+        '通常是 (1) 所在網路封鎖了該節點（機關防火牆常見），或 (2) 節點限流／暫時離線 —— ' +
+        '此時請先按「連線自我檢測」確認；檢測若過不了，' +
+        '請改選 <b>OISST v2.1</b>（不同主機，NCEI）或走本頁下方的 Python 路徑。<br>' +
+        '若只是零星幾段失敗，直接再按一次「開始建置」即可續傳，已取得的段落會由快取讀回。', 'err');
     $('#btnBuild').disabled = false;
   });
 }
