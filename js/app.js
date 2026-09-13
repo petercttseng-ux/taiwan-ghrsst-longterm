@@ -703,13 +703,29 @@ function methodHtml() {
     '<h2>方法與限制 <small>Methods &amp; caveats</small></h2>',
     '<h3>1. 資料來源與取得方式</h3>',
     '<ul>',
-    '<li><b>NOAA OISST v2.1</b>（0.25°，1981-09 迄今）：日尺度最佳內插分析場，融合 AVHRR 紅外線輻射計與船舶／浮標現場觀測，並以偏差校正處理感測器間差異。國際海洋熱浪研究（含 Hobday 等人原始定義文獻）之標準資料集。</li>',
-    '<li><b>GHRSST MUR L4</b>（JPL，0.01°，2002-06 迄今）：多感測器超高解析度融合分析場，即 OceanDataLab OVL 檢視器上 <code>GIBS_GHRSST_L4_MUR_Sea_Surface_Temperature</code> 圖層之底層產品。本頁用於高解析空間結構與交叉檢核。</li>',
-    '<li>兩者皆透過 <b>NOAA CoastWatch ERDDAP 的 griddap 介面</b>以 NetCDF 次集方式取得（server-side subsetting），只傳輸 116–128°E、18–32°N 範圍的格點，不下載全球場、亦不對圖磚做色階反演。</li>',
+    '<li><b>NOAA Coral Reef Watch CoralTemp v3.1</b>（5 km，每日，1985-04 迄今）—— 本頁的主要長期資料。' +
+      '1985–2002 以 Pathfinder 與 OSTIA 重分析、2002 年後以 NOAA/NESDIS Geo-Polar Blended 夜間 SST 為基礎，' +
+      '是目前公開、可由瀏覽器直接取用、且橫跨四十年的最高解析度每日 SST 記錄，亦為國際珊瑚白化熱壓力監測的作業標準產品。' +
+      '經 PacIOOS ERDDAP 取得。</li>',
+    '<li><b>NOAA OISST v2.1</b>（0.25°，每日）—— 交叉檢核用。經 NCEI ERDDAP 取得，' +
+      '惟該節點僅開放最近數年的滾動視窗（約 2020 年起），全記錄請走 Python 路徑。</li>',
+    '<li>兩者皆以 <b>ERDDAP griddap</b> 之 NetCDF 次集方式取得（server-side subsetting），' +
+      '只傳輸 116–128°E、18–32°N 範圍的格點，不下載全球場，亦不對圖磚做色階反演。</li>',
     '</ul>',
-    '<div class="warnbox"><b>為何不直接由 OVL 圖磚取值？</b>　OVL 是網頁檢視器，其圖磚為套用調色盤後的影像。由影像反推溫度會引入色階量化誤差（約 ±0.15 °C）、調色盤改版風險與等值線／地名疊加物污染，且需對第三方檢視器做長年份大量爬取。本專案改用資料提供者為程式存取所設計的 ERDDAP／OPeNDAP 介面，取得的是原始物理量而非顏色。</div>',
+    '<div class="warnbox"><b>關於 GHRSST MUR L4 與 OVL 圖層</b>　' +
+      'OceanDataLab OVL 上的 <code>GIBS_GHRSST_L4_MUR_Sea_Surface_Temperature</code> 圖層，其底層產品為 JPL 的 MUR L4。' +
+      '該產品在 ERDDAP 上由 NOAA CoastWatch 提供，但<b>經實測，CoastWatch、upwell、PIFSC、PolarWatch 等 NOAA 節點皆未送出 ' +
+      '<code>Access-Control-Allow-Origin</code> 標頭</b>，瀏覽器無法讀取其回應，因此網頁端無法直接取用 MUR。' +
+      '若需 MUR L4 或 OISST 全記錄，請使用 <code>tools/fetch_ghrsst.py</code> 於伺服器端取得 —— ' +
+      '該路徑不受同源政策限制，且輸出格式與本頁完全相同。</div>',
+    '<div class="warnbox"><b>為何不直接由 OVL 圖磚取值？</b>　OVL 是網頁檢視器，其圖磚為套用調色盤後的影像。' +
+      '由影像反推溫度會引入色階量化誤差（約 ±0.15 °C）、調色盤改版風險與等值線／地名疊加物污染，' +
+      '且需對第三方檢視器做長年份大量爬取。本專案改用資料提供者為程式存取所設計的 ERDDAP／OPeNDAP 介面，' +
+      '取得的是原始物理量而非顏色。</div>',
     '<h3>2. 網格與範圍</h3>',
-    '<p>116–128°E、18–32°N，0.25°×0.25°，共 48×56 = 2,688 格，與 <code>twsst20260907.png</code> 之圖幅完全對齊。OISST 為原生 0.25° 網格，無需重取樣；MUR 以 0.05° 取樣後做區塊平均。</p>',
+    '<p>116.125–127.875 °E、18.125–31.875 °N，0.25°×0.25°，共 48×56 = 2,688 格，與 <code>twsst20260907.png</code> 之圖幅完全對齊。' +
+      'OISST 為原生 0.25° 網格，無需重取樣；CoralTemp 之 0.05° 格點與本網格恰好對齊，以每 5 格取樣（非區塊平均）取得 0.25° 值，' +
+      '等同取各 0.25° 網格中心的 5 km 觀測值。</p>',
     '<h3>3. 氣候基期與距平</h3>',
     '<p>採 <b>' + (m.base ? m.base[0] + '–' + m.base[1] : '1991–2020') + '</b> 之 30 年基期（WMO 標準）。逐格、逐日序氣候值以 <b>±5 日視窗</b>（共 11 日）跨基期各年取平均，再沿日序做 <b>31 日環狀移動平均</b>平滑，即 Hobday et al. (2016) 之標準流程。距平 = 觀測 − 該日序氣候值。</p>',
     '<h3>4. 海洋熱浪判定</h3>',
@@ -723,17 +739,19 @@ function methodHtml() {
     '<h3>7. 已知限制</h3>',
     '<ul>',
     '<li><b>L4 分析場非直接觀測</b>：OISST 與 MUR 皆為內插／融合產品，雲量高的期間實際上倚賴背景場與現場資料，近岸與海峽窄水道的細部結構不可過度解讀。</li>',
-    '<li><b>解析度限制</b>：0.25° 約 25 km，無法解析臺灣海峽內的中小尺度鋒面、上升流與潮汐混合帶；MUR 雖為 0.01°，但其有效解析度受限於輸入感測器。</li>',
+    '<li><b>解析度限制</b>：本頁取樣至 0.25°（約 25 km），無法解析臺灣海峽內的中小尺度鋒面、上升流與潮汐混合帶。CoralTemp 原生為 5 km，如需該尺度請改以 0.05° 全解析度擷取。</li>',
+    '<li><b>取樣而非平均</b>：CoralTemp 以每 5 格取樣降至 0.25°，代表格點中心值而非格內平均；在梯度劇烈的近岸與鋒面帶，與區塊平均可能有數十分之一度的差異。</li>',
     '<li><b>趨勢的區域歸因</b>：局部升溫速率同時包含全球暖化訊號與環流位移（如黑潮路徑變動）造成的重新分配，兩者未在此分離。</li>',
     '<li><b>熱浪統計對基期敏感</b>：以 1991–2020 為基期時，暖化本身會使近年超標日數自然增加；此為「相對於固定基期」之定義，與採移動基期的結果不可直接比較。</li>',
-    '<li><b>資料版本</b>：OISST 近期日期屬 preliminary，數週後會由 final 版取代，數值可能微調。</li>',
+    '<li><b>資料版本</b>：CoralTemp 與 OISST 的最近數週屬 near-real-time／preliminary，日後會由正式版取代，數值可能微調。</li>',
     '</ul>',
     '<h3>8. 與影像反演儀表板的關係</h3>',
     '<p>本專案與 <a href="https://petercttseng-ux.github.io/taiwan-sst-dashboard/">臺灣周邊海域衛星遙測海面水溫時空分布儀表板</a> 互補：後者由水試所每日發布的 SST 圖檔反演，逐日、時間短（2018 迄今）但呈現的是機關實際發布的圖資；本專案直接取用原始數值產品，時間長（1981 迄今）且可做氣候尺度統計。兩者在重疊期間可互為驗證。</p>',
     '<h3>9. 引用</h3>',
     '<ul>',
+    '<li>NOAA Coral Reef Watch (2018, updated daily). NOAA Coral Reef Watch Daily Global 5km Satellite Sea Surface Temperature (CoralTemp v3.1). College Park, Maryland, USA: NOAA Coral Reef Watch.</li>',
     '<li>Huang, B. et al. (2021). Improvements of the Daily Optimum Interpolation Sea Surface Temperature (DOISST) Version 2.1. <i>J. Climate</i>, 34, 2923–2939.</li>',
-    '<li>JPL MUR MEaSUREs Project (2015). GHRSST Level 4 MUR Global Foundation SST Analysis. PO.DAAC. doi:10.5067/GHGMR-4FJ04</li>',
+    '<li>JPL MUR MEaSUREs Project (2015). GHRSST Level 4 MUR Global Foundation SST Analysis. PO.DAAC. doi:10.5067/GHGMR-4FJ04（伺服器端路徑）</li>',
     '<li>Hobday, A. J. et al. (2016). A hierarchical approach to defining marine heatwaves. <i>Prog. Oceanogr.</i>, 141, 227–238.</li>',
     '<li>Hobday, A. J. et al. (2018). Categorizing and naming marine heatwaves. <i>Oceanography</i>, 31(2), 162–173.</li>',
     '</ul>'
@@ -741,6 +759,10 @@ function methodHtml() {
 }
 
 /* ================= 建置流程 ================= */
+function curSrc() {
+  var b = $$('#srcSeg button').filter(function (x) { return x.classList.contains('on'); })[0];
+  return b ? b.dataset.s : 'crw';
+}
 function log(msg, cls) {
   var el = $('#buildLog');
   el.innerHTML += '<div class="' + (cls || '') + '">' + msg + '</div>';
@@ -753,8 +775,8 @@ function prog(p, txt) {
 }
 
 function selfTest() {
-  log('<b>連線自我檢測</b> — ' + HARVEST.getServer());
-  var src = HARVEST.SRC.oisst;
+  var key = curSrc(), src = HARVEST.SRC[key];
+  log('<b>連線自我檢測</b> — ' + src.label + '　@ ' + HARVEST.getServer(key));
   return HARVEST.timeRange(src).then(function (tr) {
     log('✓ 資料集時間範圍：' + tr.t0.slice(0, 10) + ' – ' + tr.t1.slice(0, 10), 'ok');
     $('#hdPeriod').textContent = tr.t0.slice(0, 10) + ' – ' + tr.t1.slice(0, 10);
@@ -769,8 +791,8 @@ function selfTest() {
     });
   }).catch(function (e) {
     log('✗ 連線失敗：' + e.message, 'err');
-    log('可能原因：所在網路封鎖了 coastwatch.pfeg.noaa.gov；請改選其他 ERDDAP 節點，' +
-        '或改走「沒有網路存取權時」段落所述的 Python 路徑。', 'err');
+    log('可能原因：所在網路封鎖了該節點，或該節點未送出 CORS 標頭而瀏覽器無法讀取回應。' +
+        '請改選另一個資料來源，或改走「沒有網路存取權時」段落所述的 Python 路徑。', 'err');
     return false;
   });
 }
@@ -1011,12 +1033,12 @@ function go(p) {
 
 function initUI() {
   $('#methBody').innerHTML = methodHtml();
-  var sel = $('#mirrorSel');
-  HARVEST.MIRRORS.forEach(function (m) {
-    var o = document.createElement('option'); o.value = m; o.textContent = m.replace('https://', '');
-    sel.appendChild(o);
-  });
-  sel.onchange = function () { HARVEST.setServer(sel.value); };
+  var showServer = function () {
+    var k = curSrc();
+    $('#srvTxt').textContent = HARVEST.getServer(k).replace('https://', '');
+    var s0 = HARVEST.SRC[k];
+    $('#yFrom').value = s0.start.slice(0, 4);
+  };
   ['#srRegion', '#mxRegion', '#mhRegion'].forEach(function (id) {
     var s = $(id);
     REGIONS.forEach(function (r) {
@@ -1030,7 +1052,8 @@ function initUI() {
   $('#btnClear').onclick = function () {
     HARVEST.idbClear().then(function () { log('已清除本機快取。'); });
   };
-  segment('#srcSeg', function () {});
+  segment('#srcSeg', function () { showServer(); });
+  showServer();
   segment('#mapLayer', function (v) { mapState.layer = v; drawMap(); });
   segment('#srMode', function () { drawSeries(); });
   segment('#hovMode', function () { drawHov(); });

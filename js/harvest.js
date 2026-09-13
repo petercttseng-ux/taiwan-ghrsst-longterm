@@ -12,36 +12,31 @@
     bLon0: 116.0, bLon1: 128.0, bLat0: 18.0, bLat1: 32.0
   };
 
-  var SERVER = 'https://coastwatch.pfeg.noaa.gov/erddap';
-  var MIRRORS = [
-    'https://coastwatch.pfeg.noaa.gov/erddap',
-    'https://upwell.pfeg.noaa.gov/erddap',
-    'https://oceanwatch.pifsc.noaa.gov/erddap'
-  ];
-
+  /* 可用來源。瀏覽器端只能使用有送出 CORS 標頭的 ERDDAP 節點；
+     NOAA CoastWatch／upwell／PIFSC 等節點未送 Access-Control-Allow-Origin，
+     網頁無法讀取其回應（已實測），故僅供 tools/fetch_ghrsst.py 的伺服器端路徑使用。 */
   var SRC = {
+    crw: {
+      key: 'crw',
+      server: 'https://pae-paha.pacioos.hawaii.edu/erddap',
+      ds: 'dhw_5km',
+      v: 'CRW_SST',
+      zlev: false,
+      stride: 5,                 // 0.05° → 每 5 格取樣為 0.25°（格點恰好對齊）
+      start: '1985-04-01',
+      label: 'NOAA Coral Reef Watch CoralTemp v3.1（5 km 逐日，1985– ）',
+      cite: 'NOAA Coral Reef Watch (2018, updated). Daily Global 5km Satellite SST (CoralTemp v3.1).'
+    },
     oisst: {
       key: 'oisst',
-      ds: 'ncdcOisst21Agg',
+      server: 'https://www.ncei.noaa.gov/erddap',
+      ds: 'ncdc_oisst_v2_avhrr_by_time_zlev_lat_lon',
       v: 'sst',
       zlev: true,
-      label: 'NOAA OISST v2.1 (AVHRR-only, 0.25°)',
-      cite: 'Huang et al. (2021), NOAA OISST v2.1, doi:10.1175/JCLI-D-20-0166.1',
-      start: '1981-09-01',
-      resDeg: 0.25,
-      chunkMonths: 12
-    },
-    mur: {
-      key: 'mur',
-      ds: 'jplMURSST41mday',
-      v: 'sst',
-      zlev: false,
-      label: 'GHRSST MUR L4 月平均 (JPL, 0.01° → 取樣 0.05°)',
-      cite: 'JPL MUR MEaSUREs Project (2015), GHRSST MUR L4, doi:10.5067/GHGMR-4FJ04',
-      start: '2002-06-01',
-      resDeg: 0.05,
-      stride: 5,
-      chunkMonths: 12
+      stride: null,              // 原生即 0.25°
+      start: '2020-02-28',       // NCEI ERDDAP 僅提供滾動視窗，非全記錄
+      label: 'NOAA OISST v2.1（0.25° 逐日，近 6 年，供交叉檢核）',
+      cite: 'Huang, B. et al. (2021). DOISST v2.1. J. Climate 34, 2923–2939.'
     }
   };
 
@@ -106,9 +101,10 @@
   function dayNo(d) { return Math.floor(d.getTime() / 86400000); }
 
   /* ---------- ERDDAP 存取 ---------- */
-  var activeServer = SERVER;
+  var override = null;   // 若使用者指定節點則覆寫
 
-  function url(src, path) { return activeServer + '/griddap/' + src.ds + path; }
+  function serverOf(src) { return override || src.server; }
+  function url(src, path) { return serverOf(src) + '/griddap/' + src.ds + path; }
 
   function fetchBuf(u, tries) {
     tries = tries || 4;
@@ -148,18 +144,15 @@
     });
   }
 
-  /* 組出一段期間的 .nc 次集 URL */
+  /* 組出一段期間的 .nc 次集 URL。
+     取樣網格一律為 116.125–127.875 °E、18.125–31.875 °N，0.25° 共 48 × 56 格，
+     與水試所每日衛星海面水溫圖的圖幅完全對齊。 */
   function chunkUrl(src, d0, d1) {
+    var st = src.stride ? (':' + src.stride + ':') : ':';
     var sel = '%5B(' + d0 + 'T00:00:00Z):(' + d1 + 'T23:59:59Z)%5D';
     if (src.zlev) sel += '%5B(0.0)%5D';
-    var st = src.stride ? (':' + src.stride + ':') : ':';
-    if (src.key === 'mur') {
-      sel += '%5B(' + (18.005 + 0) + '):' + src.stride + ':(' + 31.995 + ')%5D';
-      sel += '%5B(' + 116.005 + '):' + src.stride + ':(' + 127.995 + ')%5D';
-    } else {
-      sel += '%5B(' + G.lat0 + '):(' + G.lat1 + ')%5D';
-      sel += '%5B(' + G.lon0 + '):(' + G.lon1 + ')%5D';
-    }
+    sel += '%5B(' + G.lat0 + ')' + st + '(' + G.lat1 + ')%5D';
+    sel += '%5B(' + G.lon0 + ')' + st + '(' + G.lon1 + ')%5D';
     return url(src, '.nc?' + src.v + sel);
   }
 
@@ -260,9 +253,9 @@
   }
 
   root.HARVEST = {
-    G: G, SRC: SRC, MIRRORS: MIRRORS,
-    setServer: function (s) { activeServer = s; },
-    getServer: function () { return activeServer; },
+    G: G, SRC: SRC,
+    setServer: function (s) { override = s || null; },
+    getServer: function (key) { return override || (SRC[key] ? SRC[key].server : ''); },
     timeRange: timeRange, fetchChunk: fetchChunk, harvest: harvest,
     idbKeys: idbKeys, idbClear: idbClear,
     util: { ymd: ymd, mkDate: mkDate, addDays: addDays, dayNo: dayNo, pad2: pad2 }
