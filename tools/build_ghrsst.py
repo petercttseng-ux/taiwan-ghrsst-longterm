@@ -21,8 +21,9 @@ SCALE = 0.01
 EPOCH = dt.date(1970, 1, 1)
 
 SRC_LABEL = {
-    'oisst': 'NOAA OISST v2.1 (AVHRR-only, 0.25°)',
-    'mur': 'GHRSST MUR L4 月平均 (JPL, 0.01° → 取樣 0.05°)',
+    'oisst': 'NOAA OISST v2.1（AVHRR-only，0.25°）',
+    'mur': 'GHRSST MUR L4（JPL，0.01° → 取樣 0.25°）',
+    'crw': 'NOAA Coral Reef Watch CoralTemp v3.1（5 km → 取樣 0.25°）',
 }
 
 REGIONS = [
@@ -185,7 +186,7 @@ def detect_mhw(v, clim, thr, d0, min_dur=5, max_gap=2):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--raw', default='raw')
-    ap.add_argument('--src', default='oisst')
+    ap.add_argument('--src', default='crw')
     ap.add_argument('--base', nargs=2, type=int, default=[1991, 2020])
     ap.add_argument('--out', default='data')
     a = ap.parse_args()

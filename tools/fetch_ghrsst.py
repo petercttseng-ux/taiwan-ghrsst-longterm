@@ -22,32 +22,43 @@ import argparse, io, os, sys, time, urllib.request, urllib.error
 import numpy as np
 from scipy.io import netcdf_file
 
-MIRRORS = [
-    'https://coastwatch.pfeg.noaa.gov/erddap',
-    'https://upwell.pfeg.noaa.gov/erddap',
-    'https://oceanwatch.pifsc.noaa.gov/erddap',
-]
-
-LON0, LON1 = 116.125, 127.875     # 0.25° 格心
+# 伺服器端不受瀏覽器同源政策限制，因此可使用未送出 CORS 標頭的 NOAA 節點
+# （CoastWatch／upwell／PIFSC 等），也就能取得 GHRSST MUR L4 與 OISST 的全記錄。
+LON0, LON1 = 116.125, 127.875     # 0.25° 格心，與水試所圖幅對齊
 LAT0, LAT1 = 18.125, 31.875
 
 SRC = {
-    'oisst': dict(ds='ncdcOisst21Agg', var='sst', zlev=True, start='1981-09-01',
-                  label='NOAA OISST v2.1 (AVHRR-only, 0.25°)', stride=None),
-    'mur':   dict(ds='jplMURSST41mday', var='sst', zlev=False, start='2002-06-01',
-                  label='GHRSST MUR L4 monthly (JPL, 0.01° -> 0.05°)', stride=5),
+    'oisst': dict(
+        server='https://coastwatch.pfeg.noaa.gov/erddap',
+        mirrors=['https://upwell.pfeg.noaa.gov/erddap',
+                 'https://oceanwatch.pifsc.noaa.gov/erddap'],
+        ds='ncdcOisst21Agg', var='sst', zlev=True, stride=None,
+        lat=(LAT0, LAT1), lon=(LON0, LON1), start='1981-09-01',
+        label='NOAA OISST v2.1 (AVHRR-only, 0.25°)'),
+    'mur': dict(
+        server='https://coastwatch.pfeg.noaa.gov/erddap',
+        mirrors=['https://upwell.pfeg.noaa.gov/erddap'],
+        ds='jplMURSST41', var='analysed_sst', zlev=False, stride=25,
+        # MUR 之 0.01° 格點無法與 0.25° 格心完全重合，取最接近者（偏移 0.005°）
+        lat=(18.13, 31.88), lon=(116.13, 127.88), start='2002-06-01',
+        label='GHRSST MUR L4 (JPL, 0.01° -> sampled 0.25°)'),
+    'crw': dict(
+        server='https://pae-paha.pacioos.hawaii.edu/erddap',
+        mirrors=[],
+        ds='dhw_5km', var='CRW_SST', zlev=False, stride=5,
+        lat=(LAT0, LAT1), lon=(LON0, LON1), start='1985-04-01',
+        label='NOAA Coral Reef Watch CoralTemp v3.1 (5 km)'),
 }
 
 
 def build_url(server, src, d0, d1):
     s = SRC[src]
+    st = ':%d:' % s['stride'] if s['stride'] else ':'
     sel = '[(%sT00:00:00Z):(%sT23:59:59Z)]' % (d0, d1)
     if s['zlev']:
         sel += '[(0.0)]'
-    if s['stride']:
-        sel += '[(18.005):%d:(31.995)][(116.005):%d:(127.995)]' % (s['stride'], s['stride'])
-    else:
-        sel += '[(%s):(%s)][(%s):(%s)]' % (LAT0, LAT1, LON0, LON1)
+    sel += '[(%s)%s(%s)]' % (s['lat'][0], st, s['lat'][1])
+    sel += '[(%s)%s(%s)]' % (s['lon'][0], st, s['lon'][1])
     return '%s/griddap/%s.nc?%s%s' % (server, s['ds'], s['var'], sel)
 
 
@@ -65,7 +76,13 @@ def get(url, tries=4, timeout=300):
 
 def parse_nc(blob, var):
     f = netcdf_file(io.BytesIO(blob), mmap=False)
-    name = var if var in f.variables else ('analysed_sst' if 'analysed_sst' in f.variables else var)
+    name = var
+    if name not in f.variables:
+        cand = [k for k in f.variables if k not in ('time', 'depth', 'zlev',
+                                                    'latitude', 'longitude', 'lat', 'lon')]
+        if not cand:
+            raise RuntimeError('NetCDF 中找不到資料變數')
+        name = cand[0]
     v = f.variables[name]
     a = np.array(v.data, dtype='float64')
     for attr, op in (('scale_factor', 'mul'), ('add_offset', 'add')):
@@ -99,15 +116,15 @@ def quant(a):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--src', default='oisst', choices=list(SRC))
+    ap.add_argument('--src', default='crw', choices=list(SRC))
     ap.add_argument('--from', dest='y0', type=int, default=None)
     ap.add_argument('--to', dest='y1', type=int, default=None)
     ap.add_argument('--out', default='raw')
     ap.add_argument('--server', default=None)
     a = ap.parse_args()
 
-    servers = [a.server] if a.server else MIRRORS
     s = SRC[a.src]
+    servers = [a.server] if a.server else ([s['server']] + s['mirrors'])
     os.makedirs(a.out, exist_ok=True)
 
     y0 = a.y0 or int(s['start'][:4])
