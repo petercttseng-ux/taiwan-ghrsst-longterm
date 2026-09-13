@@ -101,7 +101,7 @@ footer{color:var(--dim);font-size:12px;text-align:center;padding:24px;border-top
 .barfill{height:100%;width:0;background:linear-gradient(90deg,#2f7fb5,var(--acc));transition:width .25s}
 .logbox{max-height:230px;overflow:auto;background:#0a1219;border:1px solid var(--line);
         border-radius:8px;padding:9px 11px;font-size:12px;line-height:1.55;white-space:pre-wrap;color:var(--dim)}
-.logbox b{color:var(--fg)} .logbox .err{color:#ff8a65} .logbox .ok{color:var(--ok)}
+.logbox b{color:var(--fg)} .logbox .err{color:#ff8a65} .logbox .ok{color:var(--ok)} .logbox .warn{color:#ffc46b}
 pre.code{background:#0a1219;border:1px solid var(--line);border-radius:8px;padding:10px 12px;
         font-family:var(--mono);font-size:12.5px;overflow-x:auto;color:#bcd6ea}
 #trwrap{position:relative;background:#0a1219;border:1px solid var(--line);border-radius:10px;
