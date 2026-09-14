@@ -34,6 +34,7 @@
     <button data-p="hov">Hovmöller</button>
     <button data-p="mx">年月矩陣</button>
     <button data-p="mhw">海洋熱浪</button>
+    <button data-p="hydro">水體結構與流場</button>
     <button data-p="meth">方法與限制</button>
   </nav>
 </div>
@@ -244,6 +245,11 @@ python3 tools/build_ghrsst.py --raw raw/ --src oisst --base 1991 2020 --out data
   </div>
 </section>
 
+<!-- ============ 水體結構與流場 ============ -->
+<section class="page" id="p-hydro">
+  <div id="hydroMount"></div>
+</section>
+
 <!-- ============ 方法 ============ -->
 <section class="page" id="p-meth">
   <div class="card meth" id="methBody"></div>
@@ -252,6 +258,7 @@ python3 tools/build_ghrsst.py --raw raw/ --src oisst --base 1991 2020 --out data
 <footer>
   資料：NOAA Coral Reef Watch CoralTemp v3.1 · NOAA OISST v2.1（Huang et al. 2021）·
   GHRSST MUR L4（JPL MEaSUREs，伺服器端路徑）· 經 ERDDAP griddap 取得 ·
+  現場水文與流場：ODB 國科會海洋學門資料庫（ctd_15moa / sadcp_15moa，使用者自行載入）·
   分析與視覺化由本頁於瀏覽器端完成 ·
   <a href="https://github.com/petercttseng-ux/taiwan-ghrsst-longterm">原始碼</a>
 </footer>
@@ -260,6 +267,8 @@ python3 tools/build_ghrsst.py --raw raw/ --src oisst --base 1991 2020 --out data
 <script src="js/netcdf.js"></script>
 <script src="js/harvest.js"></script>
 <script src="js/analysis.js"></script>
+<script src="js/hydro.js"></script>
+<script src="js/hydroui.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

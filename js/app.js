@@ -209,6 +209,9 @@ function drawOverview() {
     var t = A.theilSen(Float64Array.from(s.years), Float64Array.from(s.vals));
     return { r: r, slope: t.slope * 10, p: t.p };
   }).sort(function (a, b) { return b.slope - a.slope; });
+  if (window.HYDROUI) window.HYDROUI.setSatellite(rows.map(function (x) {
+    return { id: x.r.id, zh: x.r.zh, slope: x.slope, p: x.p };
+  }));
   var maxS = Math.max.apply(null, rows.map(function (x) { return Math.abs(x.slope); })) * 1.25 || 1;
   var bh = (h2 - 24) / rows.length, x0 = 132;
   rows.forEach(function (row, k) {
@@ -747,15 +750,37 @@ function methodHtml() {
     '<li><b>熱浪統計對基期敏感</b>：以 1991–2020 為基期時，暖化本身會使近年超標日數自然增加；此為「相對於固定基期」之定義，與採移動基期的結果不可直接比較。</li>',
     '<li><b>資料版本</b>：CoralTemp 與 OISST 的最近數週屬 near-real-time／preliminary，日後會由正式版取代，數值可能微調。</li>',
     '</ul>',
-    '<h3>8. 與影像反演儀表板的關係</h3>',
+    '<h3>8. 現場水文與流場（CTD／SADCP）</h3>',
+    '<p>「水體結構與流場」分頁採用 <b>ODB（國科會海洋學門資料庫，臺灣大學海洋研究所）</b>之 15 弧分網格統計圖集：',
+    '<code>ctd_15moa</code>（1985 迄今之 CTD 溫鹽密，103 個標準壓力層）與 <code>sadcp_15moa</code>（1991 迄今之船載 ADCP，10–500 m 每 10 m）。',
+    '兩者為<b>多年氣候統計</b>而非時間序列，提供 7 個期別：全年、四季（冬 12–2、春 3–5、夏 6–8、秋 9–11）與兩個季風期（東北 10–4、西南 5–9）。',
+    '本儲存庫不散布這兩份資料，需由使用者自 ODB 下載後於瀏覽器端載入；解析後以 int16 量化存於本機 IndexedDB，不上傳。</p>',
+    '<ul>',
+    '<li><b>混合層深度 MLD</b>：自表層往下首次跨越 ΔT = 0.5 °C 之深度，線性內插（Levitus 判準）。不假設剖面單調，取<b>首次</b>跨越而非排序搜尋。</li>',
+    '<li><b>溫躍層</b>：相鄰標準層間垂直溫度梯度之最大值所在（深度取兩層中點，強度換算為 °C/100 m）。梯度先取至 1e-6 再比較，並列時取較淺者，以免因浮點雜訊在等值處跳動。</li>',
+    '<li><b>20 °C 等溫面深度 D20</b>：自表層往下首次跨越 20 °C 之深度，常用作溫躍層深度的代理。</li>',
+    '<li><b>上層層結 Δσt</b>：0 m 與 100 m 之 σt 差（亦計算 0–50、0–150 m 與 0–100 m 位能異常 PEA）。</li>',
+    '<li><b>流場</b>：上層 100 m 之 u、v 算術平均；<b>流向穩定度</b> = |平均流速向量| / 平均流速純量，接近 1 表示流向恆定（如黑潮），接近 0 表示方向多變或季節反轉。</li>',
+    '<li><b>體積輸送</b>：沿指定緯度對 v 作 Σ v·Δx·Δz，Δx = 0.25° × 111.32 km × cos φ。因 SADCP 僅及 500 m 且測線覆蓋不均，所得為<b>有觀測水體</b>之輸送，非全斷面全水深輸送。季節比較一律限於「四季皆有觀測」之共同格點，否則覆蓋率差異會被誤讀為季節變化。</li>',
+    '</ul>',
+    '<div class="warnbox"><b>氣候圖集的取樣偏差</b>　ODB 圖集由歷年航次累積而成，各季節、各網格的航次數差異極大',
+    '（例如臺灣海峽北部冬季僅少數測線）。因此：(1) 空白格代表<b>無觀測</b>而非零值；(2) 未經共同格點限制的季節差，',
+    '可能只是反映不同季節走了不同測線；(3) 站數少的海域（本頁表中已標示格數）其區域平均的代表性有限。</div>',
+    '<h3>9. 衛星升溫速率與現場層結之整合診斷</h3>',
+    '<p>以 10 個海域為樣本，將衛星路徑求得的 Theil–Sen 升溫速率與現場氣候圖集的結構指標做 <b>Spearman 等級相關</b>。',
+    '兩者時間基礎相近（CoralTemp 1985 迄今、CTD 1985 迄今、SADCP 1991 迄今），但性質不同：前者是<b>變化速率</b>，後者是<b>平均狀態</b>，',
+    '因此此處檢驗的是「平均層結狀態能否解釋升溫速率的空間差異」，而非因果。樣本僅 10 且各海域非獨立（空間自相關），',
+    'p 值應視為指示性而非嚴格推論；本頁另以留一法與控制緯度、氣候表層溫之偏相關檢視其穩健性。</p>',
+    '<h3>10. 與影像反演儀表板的關係</h3>',
     '<p>本專案與 <a href="https://petercttseng-ux.github.io/taiwan-sst-dashboard/">臺灣周邊海域衛星遙測海面水溫時空分布儀表板</a> 互補：後者由水試所每日發布的 SST 圖檔反演，逐日、時間短（2018 迄今）但呈現的是機關實際發布的圖資；本專案直接取用原始數值產品，時間長（1981 迄今）且可做氣候尺度統計。兩者在重疊期間可互為驗證。</p>',
-    '<h3>9. 引用</h3>',
+    '<h3>11. 引用</h3>',
     '<ul>',
     '<li>NOAA Coral Reef Watch (2018, updated daily). NOAA Coral Reef Watch Daily Global 5km Satellite Sea Surface Temperature (CoralTemp v3.1). College Park, Maryland, USA: NOAA Coral Reef Watch.</li>',
     '<li>Huang, B. et al. (2021). Improvements of the Daily Optimum Interpolation Sea Surface Temperature (DOISST) Version 2.1. <i>J. Climate</i>, 34, 2923–2939.</li>',
     '<li>JPL MUR MEaSUREs Project (2015). GHRSST Level 4 MUR Global Foundation SST Analysis. PO.DAAC. doi:10.5067/GHGMR-4FJ04（伺服器端路徑）</li>',
     '<li>Hobday, A. J. et al. (2016). A hierarchical approach to defining marine heatwaves. <i>Prog. Oceanogr.</i>, 141, 227–238.</li>',
     '<li>Hobday, A. J. et al. (2018). Categorizing and naming marine heatwaves. <i>Oceanography</i>, 31(2), 162–173.</li>',
+    '<li>Ocean Data Bank, National Science and Technology Council, Taiwan. CTD 15-arc-minute gridded statistics (<code>ctd_15moa</code>) and SADCP 15-arc-minute gridded statistics (<code>sadcp_15moa</code>). <a href="https://www.odb.ntu.edu.tw/" target="_blank" rel="noopener">https://www.odb.ntu.edu.tw/</a></li>',
     '</ul>'
   ].join('');
 }
@@ -1045,6 +1070,7 @@ function renderAll() {
 function go(p) {
   $$('#tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.p === p); });
   $$('.page').forEach(function (s) { s.classList.toggle('on', s.id === 'p-' + p); });
+  if (p === 'hydro' && window.HYDROUI) { window.HYDROUI.mount($('#hydroMount')); return; }
   if (S.ready) {
     if (p === 'ov') drawOverview();
     if (p === 'map') { drawMap(); drawPoint(); }

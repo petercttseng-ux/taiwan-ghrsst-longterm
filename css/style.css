@@ -113,3 +113,19 @@ pre.code{background:#0a1219;border:1px solid var(--line);border-radius:8px;paddi
 .tag{display:inline-block;padding:1px 7px;border-radius:5px;font-size:11px;margin-left:6px;
      border:1px solid var(--line);color:var(--dim)}
 .tag.sig{background:#123322;border-color:#2d6b45;color:#8fd8a8}
+
+/* ---- 水體結構與流場 ---- */
+#hyMapWrap{background:#0a1219;border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;justify-content:center}
+#hyMap{cursor:crosshair}
+.tip{position:absolute;pointer-events:none;background:#04121ce6;border:1px solid var(--acc);
+     border-radius:6px;padding:5px 9px;font-size:12px;font-family:var(--mono);display:none;white-space:nowrap;z-index:5}
+#hyProf,#hySect,#hyScat{width:100%}
+#hyFile{font-size:12.5px;color:var(--dim);max-width:100%}
+#hyFile::file-selector-button{background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+     border-radius:7px;padding:6px 12px;font-family:inherit;font-size:12.5px;cursor:pointer;margin-right:10px}
+.hygrid{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:18px;align-items:start}
+.hygrid2{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:18px;align-items:start}
+@media(max-width:1100px){.hygrid,.hygrid2{grid-template-columns:1fr}}
+#hyPtTbl{min-width:390px}
+#hyCorr{min-width:400px}
+#hyPtTbl tr.unit td{color:#6f8aa3;font-size:11px;padding-top:0;padding-bottom:4px;border-bottom:1px solid #1e3448}
