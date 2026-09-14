@@ -1,6 +1,7 @@
-# 臺灣周邊海域 GHRSST 長期海溫時空動態分析
+# 臺灣周邊海域海面溫度時空動態及 ODB 水文分析
 
-**Taiwan Seas Long-term SST Dynamics — GHRSST / NOAA OISST**
+**Taiwan Seas SST Dynamics & ODB Hydrography**
+**農業部水產試驗所** · Fisheries Research Institute, Ministry of Agriculture, Taiwan
 
 以每日衛星海面水溫分析場，對臺灣周邊海域（116–128 °E、18–32 °N，0.25° 網格）進行
 四十年尺度的時空動態統計：氣候基期、距平、逐格升溫速率、海洋熱浪與 Hovmöller 剖面；

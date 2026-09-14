@@ -129,3 +129,6 @@ pre.code{background:#0a1219;border:1px solid var(--line);border-radius:8px;paddi
 #hyPtTbl{min-width:390px}
 #hyCorr{min-width:400px}
 #hyPtTbl tr.unit td{color:#6f8aa3;font-size:11px;padding-top:0;padding-bottom:4px;border-bottom:1px solid #1e3448}
+header .org{color:var(--acc);font-size:12.5px;font-weight:600;letter-spacing:1px;margin-bottom:5px}
+header .org span{color:var(--dim);font-weight:400;letter-spacing:.2px;margin-left:8px}
+@media(max-width:700px){header .org span{display:none}}

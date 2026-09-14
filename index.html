@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>臺灣周邊海域 GHRSST 長期海溫時空動態分析</title>
-<meta name="description" content="以 GHRSST / NOAA OISST 每日海面水溫資料，分析臺灣周邊海域 116–128°E、18–32°N 之長期時空動態、趨勢與海洋熱浪。">
+<title>臺灣周邊海域海面溫度時空動態及 ODB 水文分析 — 農業部水產試驗所</title>
+<meta name="description" content="農業部水產試驗所｜以每日衛星海面水溫（CoralTemp / OISST / GHRSST MUR L4）與 ODB 現場 CTD／SADCP 網格氣候圖集，分析臺灣周邊海域 116–128°E、18–32°N 之長期時空動態、升溫趨勢、海洋熱浪與上層水體結構及流場。">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -15,9 +15,10 @@
 </div>
 
 <header>
-  <h1>臺灣周邊海域 GHRSST 長期海溫時空動態分析</h1>
+  <div class="org">農業部水產試驗所 <span>Fisheries Research Institute, Ministry of Agriculture</span></div>
+  <h1>臺灣周邊海域海面溫度時空動態及 ODB 水文分析</h1>
   <div class="sub">
-    Taiwan Seas Long-term SST Dynamics ·
+    Taiwan Seas SST Dynamics &amp; ODB Hydrography ·
     範圍 <b>116–128°E, 18–32°N</b> · 網格 <b>0.25°</b> ·
     資料 <b id="hdSrc">CoralTemp v3.1 / OISST v2.1 / GHRSST MUR L4</b> ·
     期間 <b id="hdPeriod">—</b>
@@ -260,7 +261,8 @@ python3 tools/build_ghrsst.py --raw raw/ --src oisst --base 1991 2020 --out data
   GHRSST MUR L4（JPL MEaSUREs，伺服器端路徑）· 經 ERDDAP griddap 取得 ·
   現場水文與流場：ODB 國科會海洋學門資料庫（ctd_15moa / sadcp_15moa，使用者自行載入）·
   分析與視覺化由本頁於瀏覽器端完成 ·
-  <a href="https://github.com/petercttseng-ux/taiwan-ghrsst-longterm">原始碼</a>
+  <a href="https://github.com/petercttseng-ux/taiwan-ghrsst-longterm">原始碼</a><br>
+  <b>農業部水產試驗所</b>　Fisheries Research Institute, Ministry of Agriculture, Taiwan
 </footer>
 </div>
 
