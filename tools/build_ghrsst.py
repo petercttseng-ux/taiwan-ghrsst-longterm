@@ -24,6 +24,7 @@ SRC_LABEL = {
     'oisst': 'NOAA OISST v2.1（AVHRR-only，0.25°）',
     'mur': 'GHRSST MUR L4（JPL，0.01° → 取樣 0.25°）',
     'crw': 'NOAA Coral Reef Watch CoralTemp v3.1（5 km → 取樣 0.25°）',
+    'fri': '水試所每日衛星海溫圖數位化（G1SST／MUR，約每 5 日一幅、線性內插為逐日，0.25°）',
 }
 
 REGIONS = [
