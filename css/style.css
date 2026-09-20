@@ -132,3 +132,27 @@ pre.code{background:#0a1219;border:1px solid var(--line);border-radius:8px;paddi
 header .org{color:var(--acc);font-size:12.5px;font-weight:600;letter-spacing:1px;margin-bottom:5px}
 header .org span{color:var(--dim);font-weight:400;letter-spacing:.2px;margin-left:8px}
 @media(max-width:700px){header .org span{display:none}}
+
+/* ---- ODB 水文與漁場耦合分頁（odbfish.js） ---- */
+:root{--muted:var(--dim);--accent:var(--acc);--ink:var(--fg);--sunk:var(--panel2);--land:#34404e;--surface:var(--panel)}
+nav.tabs .sep{width:1px;background:var(--line);margin:6px 6px 0}
+nav.tabs button.odbtab{color:#9fd3c7}
+nav.tabs button.odbtab.on{color:var(--fg)}
+.ofwrap{position:relative;background:#0a1219;border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;justify-content:center}
+.oftip{position:absolute;pointer-events:none;background:#04121ce6;border:1px solid var(--acc);border-radius:6px;padding:5px 9px;font-size:12px;font-family:var(--mono);display:none;white-space:nowrap}
+.grid2c{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:18px}
+.grid2c>.card{margin-bottom:18px}
+.pdgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px}
+.chart{width:100%;overflow-x:auto}
+.chart svg{display:block;width:100%;height:auto;min-width:380px}
+.chart svg text{fill:var(--dim);font-family:var(--mono);font-size:11px}
+.finding{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;padding:12px 0;border-top:1px solid var(--line)}
+.finding:first-child{border-top:0}
+.finding h3{margin:0;font-size:14px}
+.finding p{grid-column:2;margin:0;color:#c9d9e6;font-size:13px}
+.ev{font-family:var(--mono);font-size:11px;padding:1px 8px;border-radius:99px;height:fit-content;white-space:nowrap;border:1px solid}
+.ev.s{color:#8fd8a8;border-color:#2d6b45}.ev.m{color:#ffc46b;border-color:#6b4d12}.ev.w{color:var(--dim);border-color:var(--line)}
+#odbMap,#fsMap{cursor:crosshair}
+#secCv,#tsCv,#foHeat,#odbProf{width:100%}
+.odbwait{color:var(--dim);padding:30px;text-align:center}
+.odbnodata>*:not(.odbload){display:none}

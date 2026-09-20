@@ -36,6 +36,10 @@
     <button data-p="mx">年月矩陣</button>
     <button data-p="mhw">海洋熱浪</button>
     <button data-p="hydro">水體結構與流場</button>
+    <span class="sep"></span>
+    <button data-p="odb" class="odbtab">水文 × 作業分布</button>
+    <button data-p="fsst" class="odbtab">漁場 × 衛星海溫</button>
+    <button data-p="fodb" class="odbtab">漁場 × ODB 水文</button>
     <button data-p="meth">方法與限制</button>
   </nav>
 </div>
@@ -251,6 +255,140 @@ python3 tools/build_ghrsst.py --raw raw/ --src oisst --base 1991 2020 --out data
   <div id="hydroMount"></div>
 </section>
 
+<!-- ============ ODB 水文（CTD／ADCP） ============ -->
+<section class="page" id="p-odb">
+  <div class="card">
+    <h2>ODB 水文氣候場 × 拖網作業 <small>臺灣海洋學門資料庫 CTD 與船載 ADCP · 0.25° 網格 · 季節與季風期</small></h2>
+    <p class="note">資料來源為 ODB 的 <code>ctd_grid15moa</code>（溫度、鹽度、密度剖面）和 <code>sadcp_grid15moa</code>（船載 ADCP 流速剖面）氣候平均場，範圍 119.25–124.75°E、22.25–27.75°N。季節的月份定義是用本站 2019–2024 年衛星海溫，逐一比對 ODB 表層溫度後反推：冬季為 12–2 月，春、夏、秋依此類推（表層誤差 1.0–1.4°C，其他分法誤差達 2.8°C）；東北季風期為 10–3 月，西南季風期為 5–9 月。</p>
+    <div class="ctl">
+      <label>時段</label>
+      <div class="seg" id="odbPer"><button data-m="13" class="on">冬</button><button data-m="14">春</button><button data-m="15">夏</button><button data-m="16">秋</button><button data-m="17">東北季風</button><button data-m="18">西南季風</button><button data-m="0">全年</button></div>
+      <label>變數</label>
+      <select id="odbVar">
+        <option value="T0">表層水溫 (°C)</option>
+        <option value="T100" selected>100 m 水溫 (°C)</option>
+        <option value="Tb">最深觀測層水溫 (°C)</option>
+        <option value="S0">表層鹽度 (psu)</option>
+        <option value="S100">100 m 鹽度 (psu)</option>
+        <option value="Sb">最深觀測層鹽度 (psu)</option>
+        <option value="dT50">表層 − 50 m 溫差 (°C)</option>
+        <option value="MLD">混合層深度 (m)</option>
+        <option value="N2max">最大浮力頻率 N² (s⁻²)</option>
+        <option value="spd0">近表層流速 (m/s)</option>
+        <option value="spd100">100 m 流速 (m/s)</option>
+        <option value="eke0">流速變異 EKE (m²/s²)</option>
+        <option value="vort">相對渦度 (10⁻⁶ s⁻¹)</option>
+        <option value="div">水平散度 (10⁻⁶ s⁻¹)</option>
+        <option value="shear">垂直流速剪切 ((m/s)/km)</option>
+        <option value="sst">衛星海溫（水試所圖反演）(°C)</option>
+        <option value="ffreq">衛星鋒面出現頻率</option>
+      </select>
+      <label><input type="checkbox" id="odbVec" checked> 近表層流向量</label>
+      <label><input type="checkbox" id="odbEff" checked> 拖網作業量</label>
+      <label><input type="checkbox" id="odbAx" checked> 黑潮流軸</label>
+    </div>
+    <div class="mapgrid">
+      <div>
+        <div class="ofwrap"><canvas id="odbMap"></canvas><div class="oftip" id="odbTip"></div></div>
+        <div class="legend"><canvas id="odbLeg" width="260" height="12"></canvas><span id="odbLegTxt"></span></div>
+        <p class="note" style="margin-top:8px">白色空心圓代表該季每月平均拖網作業時數，面積與時數成正比（2021–2024 年 VDR，0.25° 彙整）。黃色點是黑潮流軸，取各緯度列近表層流速最大且 ≥ 0.5 m/s 的格點。點選任一格點，右側會顯示該點的剖面。</p>
+      </div>
+      <div>
+        <div class="card" style="margin:0">
+          <h2>格點剖面 <small id="odbPtLbl">點選左圖</small></h2>
+          <canvas id="odbProf" height="360"></canvas>
+          <p class="note" id="odbPtNote">左圖：溫度（橙）與鹽度（青）剖面；右圖：ADCP 東西向流速 u（青）、南北向流速 v（橙）。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>緯向垂直斷面 <small>溫度場 × ADCP 南北向流速 × 作業量</small></h2>
+    <div class="ctl"><label>緯度列</label>
+      <div class="seg" id="secLat"><button data-m="24.75">24.75°N</button><button data-m="25.0">25.00°N</button><button data-m="25.25" class="on">25.25°N</button><button data-m="25.5">25.50°N</button><button data-m="25.75">25.75°N</button><button data-m="26.0">26.00°N</button></div>
+      <span class="note" style="margin:0">時段與上方地圖同步</span></div>
+    <canvas id="secCv" height="380"></canvas>
+    <p class="note">色塊為溫度，等值線為 ADCP 南北向流速 v（實線為北向，虛線為南向，間隔 0.2 m/s）。上方長條是同一經度的拖網作業量。東北角外海 100–150 m 深處的冷水抬升（等溫線上拱），正是作業最集中的位置。</p>
+  </div>
+  <div class="card">
+    <h2>T–S 水團圖 <small>最深觀測層（≤ 300 m）· 圓點面積代表作業量</small></h2>
+    <canvas id="tsCv" height="380"></canvas>
+    <p class="note">水團分類：鹽度 &lt; 34.0 為沿岸／陸棚稀釋水；鹽度 ≥ 34.6 且水溫 &lt; 22°C 為黑潮次表層水（KSSW）；鹽度 ≥ 34.6 且水溫 ≥ 22°C 為黑潮表層水；其餘為陸棚混合水。</p>
+  </div>
+</section>
+
+<!-- ============ 漁場 × 衛星海溫（VDR） ============ -->
+<section class="page" id="p-fsst">
+  <div class="kpis" id="fsKpi"></div>
+  <div class="card">
+    <h2>拖網漁場與衛星海溫的主要發現 <small>VDR 作業時數 × 水試所每日衛星海溫圖（474 幅數位化）· 2018/11–2025/06</small></h2>
+    <div id="fsFind"></div>
+  </div>
+  <div class="card">
+    <h2>逐月作業量與漁場海溫 <small>作業處（加權）與可及水域均溫</small></h2>
+    <div class="chart" id="fsTs"></div>
+  </div>
+  <div class="card">
+    <h2>月別海溫 × 作業地圖 <small>0.05° · 水試所衛星海溫圖反演</small></h2>
+    <div class="ctl">
+      <select id="fsMon"></select>
+      <input type="range" id="fsRange" min="0" max="79" value="68">
+      <button class="btn" id="fsPlay">▶ 播放</button>
+      <div class="seg" id="fsLayer"><button data-l="sst" class="on">海溫</button><button data-l="anom">距平</button><button data-l="grad">梯度</button></div>
+      <label><input type="checkbox" id="fsHot" checked> 作業熱點 Gi*</label>
+    </div>
+    <div class="mapgrid">
+      <div><div class="ofwrap"><canvas id="fsMap"></canvas></div>
+        <div class="legend"><canvas id="fsLeg" width="260" height="12"></canvas><span id="fsLegTxt"></span></div></div>
+      <div><div class="card" style="margin:0"><h2 id="fsMTitle">—</h2><table id="fsMStat"></table><div class="chart" id="fsHist" style="margin-top:10px"></div>
+        <p class="note">淺色柱為可及水域的海溫分布，橙色柱為作業時數的海溫分布。</p></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>海溫偏好（商數分析與 Perry–Smith 檢定） <small>月內置換 · 可及水域為船隊足跡</small></h2>
+    <div class="ctl">
+      <div class="seg" id="fsPv"><button data-l="sst" class="on">絕對海溫</button><button data-l="rel">相對海溫</button><button data-l="grad">海溫梯度</button><button data-l="anom">海溫距平</button><button data-l="dist">離岸距離</button></div>
+      <div class="seg" id="fsPs"><button data-l="全年" class="on">全年</button><button data-l="冬">冬</button><button data-l="春">春</button><button data-l="夏">夏</button><button data-l="秋">秋</button></div>
+    </div>
+    <div class="chart" id="fsPref"></div><p class="note" id="fsPrefCap"></p>
+  </div>
+  <div class="grid2c">
+    <div class="card"><h2>鋒面 10 km 內的比例 <small>作業時數與可及水域</small></h2><div class="chart" id="fsFront"></div></div>
+    <div class="card"><h2>船隊是否追隨等溫線 <small>每點為一個月</small></h2><div class="chart" id="fsTrack"></div><p class="note" id="fsTrackCap"></p></div>
+  </div>
+  <div class="grid2c">
+    <div class="card"><h2>GAM 出現機率模式 <small>2021–2023 年建模、2024 年獨立驗證</small></h2><div class="tblwrap" style="max-height:none"><table id="fsGam"></table></div></div>
+    <div class="card"><h2>船群水溫策略 <small>作業海溫四分位距與中位數</small></h2>
+      <div class="ctl"><div class="seg" id="fsGs"><button data-l="冬" class="on">冬</button><button data-l="春">春</button><button data-l="夏">夏</button><button data-l="秋">秋</button></div></div>
+      <div class="chart" id="fsGrp"></div></div>
+  </div>
+</section>
+
+<!-- ============ 漁場 × ODB 水文 ============ -->
+<section class="page" id="p-fodb">
+  <div class="kpis" id="foKpi"></div>
+  <div class="card">
+    <h2>選擇性指數熱圖 <small>(作業加權平均 − 可及平均) ÷ 可及標準差 · 星號表示 Spearman ρ 在空間自相關修正後 p &lt; 0.05</small></h2>
+    <canvas id="foHeat" height="560"></canvas>
+    <p class="note">可及水域是 VDR 足跡涵蓋的 244 個 0.25° 格點。相關係數的檢定以 Clifford et al.（1989）的 Moran 相關圖估計有效樣本數，避免因鄰近格點相似而高估顯著性。將滑鼠移到格子上可看到 ρ、p 值與有效樣本數。</p>
+  </div>
+  <div class="grid2c">
+    <div class="card"><h2>作業處經歷的水文條件 <small>季節循環 · 作業加權與可及平均</small></h2>
+      <div class="ctl"><select id="foExpVar"><option value="T100">100 m 水溫</option><option value="T0">表層水溫（CTD）</option><option value="sst">衛星海溫</option><option value="MLD">混合層深度</option><option value="dT50">表層 − 50 m 溫差</option><option value="spd0">近表層流速</option><option value="eke0">流速變異 EKE</option><option value="S100">100 m 鹽度</option></select></div>
+      <div class="chart" id="foExp"></div></div>
+    <div class="card"><h2>哪一類海洋資料最能辨識漁場 <small>梯度提升樹 · 1° 空間區塊交叉驗證 AUC（5 次重複）</small></h2>
+      <div class="chart" id="foCv"></div></div>
+  </div>
+  <div class="grid2c">
+    <div class="card"><h2>物理變數重要度 <small>只用海洋變數的模式 · 置換重要度（ΔAUC）</small></h2><div class="chart" id="foImp"></div></div>
+    <div class="card"><h2>水團利用 <small>作業占比與可及占比（最深觀測層 T–S）</small></h2><div class="chart" id="foWm"></div></div>
+  </div>
+  <div class="card"><h2>部分依賴 <small>物理模式中最重要的變數（logit 尺度的出現機率）</small></h2><div class="pdgrid" id="foPd"></div></div>
+  <div class="card"><h2>季風期轉換 <small>西南季風減東北季風：作業占比變化與水文變化的 Spearman 相關</small></h2><div class="tblwrap" style="max-height:none"><table id="foMon"></table></div>
+    <p class="note">這裡的 p 值沒有做空間自相關修正，僅供參考。</p></div>
+  <div class="card meth" id="foExpert"></div>
+</section>
+
 <!-- ============ 方法 ============ -->
 <section class="page" id="p-meth">
   <div class="card meth" id="methBody"></div>
@@ -260,6 +398,7 @@ python3 tools/build_ghrsst.py --raw raw/ --src oisst --base 1991 2020 --out data
   資料：NOAA Coral Reef Watch CoralTemp v3.1 · NOAA OISST v2.1（Huang et al. 2021）·
   GHRSST MUR L4（JPL MEaSUREs，伺服器端路徑）· 經 ERDDAP griddap 取得 ·
   現場水文與流場：ODB 國科會海洋學門資料庫（ctd_15moa / sadcp_15moa，使用者自行載入）·
+  拖網漁場分頁：ODB 水文格點 × 拖網漁船 VDR 網格作業量 × 水試所每日衛星海溫圖（資料檔不隨網站散布，使用者自行載入）·
   分析與視覺化由本頁於瀏覽器端完成 ·
   <a href="https://github.com/petercttseng-ux/taiwan-ghrsst-longterm">原始碼</a><br>
   <b>農業部水產試驗所</b>　Fisheries Research Institute, Ministry of Agriculture, Taiwan
@@ -272,5 +411,6 @@ python3 tools/build_ghrsst.py --raw raw/ --src oisst --base 1991 2020 --out data
 <script src="js/hydro.js"></script>
 <script src="js/hydroui.js"></script>
 <script src="js/app.js"></script>
+<script src="js/odbfish.js"></script>
 </body>
 </html>

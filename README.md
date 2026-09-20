@@ -124,6 +124,18 @@ python3 tools/hydro_stats.py --bin data/hydro.bin --trend data/analysis.json
 產出的 `data/analysis.json` 放回本目錄，儀表板即會直接載入而略過建置步驟
 （瀏覽器版的「匯出資料檔」按鈕也會產生同一個檔案）。
 
+## ODB 水文與拖網漁場耦合（新增分頁）
+
+| 分頁 | 內容 |
+|---|---|
+| 水文 × 作業分布 | ODB 0.25° CTD 與船載 ADCP 氣候場（四季與東北、西南季風期）：水溫、鹽度、分層、混合層、流速、EKE、渦度、散度；格點剖面、緯向斷面、T–S 水團圖、黑潮流軸 |
+| 漁場 × 衛星海溫 | 拖網漁船 VDR 作業時數 × 水試所每日衛星海溫圖數位化（0.05°，2018/11–2025/06）：商數分析、Perry–Smith 檢定、鋒面、GAM、船群 |
+| 漁場 × ODB 水文 | 選擇性指數熱圖（Clifford 有效樣本數修正）、空間區塊交叉驗證 AUC、置換重要度、部分依賴、水團利用、季風期轉換、專家判讀 |
+
+資料檔 `data/odb_fishery.json` 由 `tools/odb/` 的離線 Python 流程產製，**不隨儲存庫散布**（已列入 `.gitignore`），
+內含 ODB 格點資料與拖網 VDR 網格作業量（不含個別船舶資訊）。開啟分頁時，頁面會先找 `data/odb_fishery.json`，
+找不到時提供「選擇檔案」讓使用者從本機載入，並快取於瀏覽器 IndexedDB。
+
 ## 檔案結構 Structure
 
 ```
@@ -134,12 +146,14 @@ js/harvest.js           ERDDAP griddap 擷取、IndexedDB 快取、續傳
 js/analysis.js          氣候基期、熱浪、Theil–Sen／Mann–Kendall、Hovmöller
 js/hydro.js             CTD／SADCP 圖集解析、剖面診斷、區域統計、Spearman
 js/hydroui.js           「水體結構與流場」分頁之介面與繪圖
+js/odbfish.js           拖網漁場 × 水文／衛星海溫分頁
 js/app.js               介面與繪圖（原生 canvas，無外部相依）
 data/land_mask.png      0.01° 陸地遮罩
 tools/fetch_ghrsst.py   Python 版擷取
 tools/build_ghrsst.py   Python 版統計與資料檔產製
 tools/pack_hydro.py     CTD／SADCP CSV → 緊湊二進位 hydro.bin
 tools/hydro_stats.py    Python 版水文統計（與 js/hydro.js 同一組定義）
+tools/odb/              拖網漁場 × ODB／衛星海溫分析之離線 Python 流程（產生 data/odb_fishery.json）
 ```
 
 前端無任何外部相依，不載入第三方指令碼或字型。
