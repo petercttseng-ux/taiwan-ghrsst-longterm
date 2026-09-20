@@ -280,7 +280,7 @@ python3 tools/build_ghrsst.py --raw raw/ --src oisst --base 1991 2020 --out data
         <option value="vort">相對渦度 (10⁻⁶ s⁻¹)</option>
         <option value="div">水平散度 (10⁻⁶ s⁻¹)</option>
         <option value="shear">垂直流速剪切 ((m/s)/km)</option>
-        <option value="sst">衛星海溫（水試所圖反演）(°C)</option>
+        <option value="sst">衛星海溫（NOAA CoralTemp v3.1）(°C)</option>
         <option value="ffreq">衛星鋒面出現頻率</option>
       </select>
       <label><input type="checkbox" id="odbVec" checked> 近表層流向量</label>
@@ -321,7 +321,7 @@ python3 tools/build_ghrsst.py --raw raw/ --src oisst --base 1991 2020 --out data
 <section class="page" id="p-fsst">
   <div class="kpis" id="fsKpi"></div>
   <div class="card">
-    <h2>拖網漁場與衛星海溫的主要發現 <small>VDR 作業時數 × 水試所每日衛星海溫圖（474 幅數位化）· 2018/11–2025/06</small></h2>
+    <h2>拖網漁場與衛星海溫的主要發現 <small>VDR 作業時數 × NOAA Coral Reef Watch CoralTemp v3.1 每日 5 km 海溫 · 2018/11–2025/06</small></h2>
     <div id="fsFind"></div>
   </div>
   <div class="card">
@@ -329,7 +329,12 @@ python3 tools/build_ghrsst.py --raw raw/ --src oisst --base 1991 2020 --out data
     <div class="chart" id="fsTs"></div>
   </div>
   <div class="card">
-    <h2>月別海溫 × 作業地圖 <small>0.05° · 水試所衛星海溫圖反演</small></h2>
+    <h2>漁場長期海溫變化 <small>CoralTemp v3.1 月平均 · 1985–2025 · 相對 1991–2020 氣候值的距平</small></h2>
+    <div class="chart" id="fsLt"></div>
+    <p class="note" id="fsLtCap"></p>
+  </div>
+  <div class="card">
+    <h2>月別海溫 × 作業地圖 <small>0.05° · NOAA CoralTemp v3.1 月平均 · 距平相對 1991–2020 氣候值</small></h2>
     <div class="ctl">
       <select id="fsMon"></select>
       <input type="range" id="fsRange" min="0" max="79" value="68">
@@ -398,7 +403,7 @@ python3 tools/build_ghrsst.py --raw raw/ --src oisst --base 1991 2020 --out data
   資料：NOAA Coral Reef Watch CoralTemp v3.1 · NOAA OISST v2.1（Huang et al. 2021）·
   GHRSST MUR L4（JPL MEaSUREs，伺服器端路徑）· 經 ERDDAP griddap 取得 ·
   現場水文與流場：ODB 國科會海洋學門資料庫（ctd_15moa / sadcp_15moa，使用者自行載入）·
-  拖網漁場分頁：ODB 水文格點 × 拖網漁船 VDR 網格作業量 × 水試所每日衛星海溫圖（資料檔不隨網站散布，使用者自行載入）·
+  拖網漁場分頁：ODB 水文格點 × 拖網漁船 VDR 網格作業量 × NOAA CRW CoralTemp v3.1（資料檔不隨網站散布，使用者自行載入）·
   分析與視覺化由本頁於瀏覽器端完成 ·
   <a href="https://github.com/petercttseng-ux/taiwan-ghrsst-longterm">原始碼</a><br>
   <b>農業部水產試驗所</b>　Fisheries Research Institute, Ministry of Agriculture, Taiwan

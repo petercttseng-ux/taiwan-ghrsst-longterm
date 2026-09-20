@@ -1,5 +1,5 @@
 /* odbfish.js — ODB 水文（CTD／ADCP）與拖網漁場時空相關分析分頁
-   資料：data/odb_fishery.json（離線以 Python 產製：ODB 0.25° 氣候場、VDR 網格作業量、水試所衛星海溫圖數位化） */
+   資料：data/odb_fishery.json（離線以 Python 產製：ODB 0.25° 氣候場、VDR 網格作業量、NOAA CRW CoralTemp v3.1 每日 5 km 海溫） */
 (function () {
 'use strict';
 var $ = function (s) { return document.querySelector(s); };
@@ -56,6 +56,21 @@ function grat(g, lon0, lon1, lat0, lat1, W, H, step) {
   for (var lo = Math.ceil(lon0); lo <= lon1; lo += step) { var x = (lo - lon0) / (lon1 - lon0) * W; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); g.fillText(lo + '°E', x + 3, H - 5); }
   for (var la = Math.ceil(lat0); la <= lat1; la += step) { var y = H - (la - lat0) / (lat1 - lat0) * H; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.fillText(la + '°N', 4, y - 4); }
   g.restore();
+}
+
+function drawFsLt() {
+  var L0 = V.lt, yrs = L0.years, A = L0.ann_anom_foot, n = yrs.length, w = 1100, h = 300, L = 46, R = 20, s = frame($('#fsLt'), w, h);
+  var x = sc(yrs[0] - .5, yrs[n - 1] + .5, L, w - R), y = sc(-1.2, 1.2, 262, 20);
+  axY(s, y, [-1, -0.5, 0, 0.5, 1], L, w - R, function (v) { return (v > 0 ? '+' : '') + v + '°'; });
+  var mA = L0.anom_foot; mA.forEach(function (v, i) { }); var d = ''; L0.ym.forEach(function (k, i) { var v = mA[i]; if (v == null) return; var t = +k.slice(0, 4) + (+k.slice(5) - .5) / 12 - .5; if (t > yrs[n - 1] + .5) return; d += (d ? 'L' : 'M') + x(t).toFixed(1) + ',' + y(Math.max(-1.2, Math.min(1.2, v))).toFixed(1); });
+  A.forEach(function (v, i) { if (v == null) return; S('rect', { x: x(yrs[i]) - 9, width: 18, y: Math.min(y(v), y(0)), height: Math.abs(y(v) - y(0)), fill: v > 0 ? css('--warm') : css('--acc'), opacity: .75 }, s); });
+  S('path', { d: d, fill: 'none', stroke: css('--dim'), 'stroke-width': 1, opacity: .6 }, s);
+  var tr = L0.trend['全年_足跡'], my = yrs.reduce(function (a, b) { return a + b; }, 0) / n, ma = A.reduce(function (a, b) { return a + b; }, 0) / n, sl = tr.slope_dec / 10;
+  S('line', { x1: x(yrs[0]), y1: y(ma + sl * (yrs[0] - my)), x2: x(yrs[n - 1]), y2: y(ma + sl * (yrs[n - 1] - my)), stroke: css('--fg'), 'stroke-width': 2, 'stroke-dasharray': '6 4' }, s);
+  yrs.forEach(function (yv) { if (yv % 5 === 0) T(s, x(yv), 284, yv, { 'text-anchor': 'middle' }); });
+  [[css('--warm'), '年均距平（暖）'], [css('--acc'), '年均距平（冷）'], [css('--dim'), '月距平'], [css('--fg'), '線性趨勢']].forEach(function (a, i) { S('rect', { x: L + 20 + i * 140, y: 6, width: 14, height: 4, fill: a[0] }, s); T(s, L + 38 + i * 140, 11, a[1], { style: 'fill:' + css('--fg') }); });
+  var TT = L0.trend, sea = ['冬', '春', '夏', '秋'];
+  $('#fsLtCap').innerHTML = '範圍為 VDR 船隊足跡涵蓋的 0.05° 網格。年均距平線性趨勢 <b class="mono">+' + fmt(tr.slope_dec) + ' ± ' + fmt(tr.ci95) + '°C／10 年</b>（Sen 斜率 +' + fmt(tr.sen_dec) + '，Mann–Kendall p &lt; 0.001；殘差一階自相關 ' + fmt(tr.r1) + '，有效樣本數約 ' + Math.round(tr.neff) + '）。各季：' + sea.map(function (k) { return k + ' +' + fmt(TT[k + '_足跡'].slope_dec); }).join('、') + '°C／10 年。作業熱點（Gi* &gt; 2.58）+' + fmt(TT['全年_熱點'].slope_dec) + '°C／10 年，整個 22–28°N、119–125°E 範圍平均 +' + fmt(L0.trendmap_dom) + '°C／10 年。';
 }
 
 /* ================= ODB 水文 ================= */
@@ -189,14 +204,17 @@ function initV() { V = O.vdr; NX = V.nx; NY = V.ny; NC = NX * NY; SSTb = b64(V.s
 function buildFsst() {
   initV();
   var tot = M.effort.reduce(function (a, b) { return a + (b || 0); }, 0);
-  var K = [['配對月數', V.months.length + ' 個月', '2018/11–2025/06'], ['數位化海溫圖', '474 幅', '水試所每日衛星海溫圖'], ['拖網作業時數', Math.round(tot / 1000) + ' 千小時', '119 艘 · VDR'], ['追溫斜率', '0.99', '作業海溫對可及均溫'], ['位置＋季節 AUC', '0.966', '2024 年獨立驗證'], ['冬季鋒面 10 km 內', '54% / 24%', '作業 / 可及']];
+  var LT = V.lt, TR = LT.trend;
+  var K = [['海溫資料', 'CoralTemp v3.1', 'NOAA CRW 每日 5 km · 2,431 日'], ['拖網作業時數', Math.round(tot / 1000) + ' 千小時', V.months.length + ' 個月 · 119 艘 · VDR'], ['追溫斜率', fmt(V.dyn.track.slope), '作業海溫對可及均溫'], ['位置＋季節 AUC', fmt(V.gam.models['空間+季節'].auc, 3), '2024 年獨立驗證'], ['冬季鋒面 10 km 內', Math.round(V.front.front['冬'].share_10km_use * 100) + '% / ' + Math.round(V.front.front['冬'].share_10km_av * 100) + '%', '作業 / 可及'], ['漁場長期增溫', '+' + fmt(TR['全年_足跡'].slope_dec) + '°C', '每 10 年 · 1985–2025']];
   $('#fsKpi').innerHTML = K.map(function (k) { return '<div class="kpi acc"><div class="lab">' + k[0] + '</div><div class="val">' + k[1] + '</div><div class="sub">' + k[2] + '</div></div>'; }).join('');
-  var F = [['s', '強', '船隊固守漁場，不追隨等溫線', '每月作業處海溫與可及水域均溫幾乎一比一同步（斜率 0.99、r = 0.98）；去除季節後斜率仍為 0.88。拖網船是固定在地理上的漁場承受季節變化，而不是追著特定水溫移動。'],
-    ['s', '強', '水溫的影響已經反映在地理位置上', '只用位置加季節的 GAM，2024 年獨立驗證 AUC 就達到 0.966；加入逐月海溫、梯度、距平後，偏差解釋率只從 50.9% 提高到 51.2%。'],
-    ['s', '強', '冬、春兩季的作業緊貼海溫鋒面', '冬季 54% 的作業時數在鋒面（≥ 0.05°C/km）10 km 內，可及水域只有 24%；梯度 ≥ 0.08°C/km 的網格商數 Q = 4.4。夏季鋒面消失，這個關係也跟著不見。'],
-    ['s', '強', '避開黑潮最暖的主軸水', '作業處相對海溫中位數 −0.23°C，可及水域 +0.05°C；夏季偏好比周圍冷約 0.5°C 的湧升冷水區（Q = 2.9）。'],
+  var F = [['s', '強', '漁場持續增溫，秋季最快', '以 CoralTemp 1985–2025 年月平均計算，船隊足跡範圍年均海溫每 10 年上升 ' + fmt(TR['全年_足跡'].slope_dec) + ' ± ' + fmt(TR['全年_足跡'].ci95) + '°C（已依殘差自相關修正有效樣本數，p &lt; 0.001），作業熱點 +' + fmt(TR['全年_熱點'].slope_dec) + '°C。季節上以秋季 +' + fmt(TR['秋_足跡'].slope_dec) + '°C 最快、冬季 +' + fmt(TR['冬_足跡'].slope_dec) + '°C 最慢；2019–2024 年平均比 1991–2020 年氣候值高 ' + fmt(LT.recent['2019_2024_vs_9120_foot']) + '°C，最暖的 5 年全部落在 2020 年之後。'],
+    ['s', '強', '船隊固守漁場，不追隨等溫線', '每月作業處海溫與可及水域均溫幾乎一比一同步（斜率 ' + fmt(V.dyn.track.slope) + '、r = ' + fmt(V.dyn.track.r) + '）；去除季節後斜率仍為 ' + fmt(V.dyn.track.deseason_slope) + '。拖網船是固定在地理上的漁場承受季節變化，而不是追著特定水溫移動。'],
+    ['s', '強', '冬、春、秋三季的作業緊貼海溫鋒面', '冬季 ' + Math.round(V.front.front['冬'].share_10km_use * 100) + '% 的作業時數在鋒面（≥ 0.05°C/km）10 km 內，可及水域只有 ' + Math.round(V.front.front['冬'].share_10km_av * 100) + '%；秋季為 ' + Math.round(V.front.front['秋'].share_10km_use * 100) + '% 對 ' + Math.round(V.front.front['秋'].share_10km_av * 100) + '%。冬季梯度 ≥ 0.08°C/km 的網格商數 Q = 9.5。夏季鋒面消失，這個關係也跟著不見。'],
+    ['s', '強', '水溫訊號多半已反映在地理位置上', '只用位置加季節的 GAM，2024 年獨立驗證 AUC 為 ' + fmt(V.gam.models['空間+季節'].auc, 3) + '；只用海溫、梯度、距平與離岸距離也有 ' + fmt(V.gam.models['環境+季節'].auc, 3) + '。兩者合併後偏差解釋率只從 ' + Math.round(V.gam.models['空間+季節'].dev * 1000) / 10 + '% 提高到 ' + Math.round(V.gam.models['完整模式'].dev * 1000) / 10 + '%，表示海溫場與漁場位置高度共線。'],
+    ['s', '強', '避開黑潮最暖的主軸水', '作業處相對海溫中位數 ' + fmt(V.pref.rel['全年'].q_use[2]) + '°C，可及水域 +' + fmt(V.pref.rel['全年'].q_av[2]) + '°C；夏季偏好比周圍冷 0–1°C 的湧升冷水區（Q ≈ 2.0）。'],
     ['m', '中', '兩種船群策略', '基隆籍與標本船在離岸 13–22 浬、陸棚冷水側作業；宜蘭籍、單拖、雙拖、櫻花蝦船在離岸 3–5 浬、黑潮影響的蘭陽海域作業。'],
-    ['w', '弱', '月尺度海溫距平的耦合不顯著', 'MCA 第一模態 SCF 51%，但置換檢定 p = 0.42；重心緯度與距平的滯後相關經多重比較修正後不顯著。']];
+    ['w', '弱', '月尺度海溫距平的耦合不顯著', 'MCA 第一模態 SCF ' + Math.round(V.dyn.mca.scf[0] * 100) + '%，但置換檢定 p = ' + fmt(V.dyn.mca.p) + '；各年作業重心緯度與海溫距平的相關 r = ' + fmt(V.dyn.annual_r.r) + '（p = ' + fmt(V.dyn.annual_r.p) + '）。增溫趨勢目前沒有讓漁場位置出現可偵測的年際移動。'],
+    ['m', '中', '資料交叉驗證', 'CoralTemp 與先前由水試所每日海溫圖數位化的月平均場相比，r = 0.993、RMSE 0.47°C、平均偏差 0.08°C，主要結論一致；差異在鋒面：CoralTemp 為無缺值的每日 L4 分析場，鋒面商數與冬季作業鋒面占比比數位化資料更明確。']];
   $('#fsFind').innerHTML = F.map(function (f) { return '<div class="finding"><span class="ev ' + f[0] + '">證據 ' + f[1] + '</span><h3>' + f[2] + '</h3><p>' + f[3] + '</p></div>'; }).join('');
   var sel = $('#fsMon'); V.months.forEach(function (k, i) { var o = document.createElement('option'); o.value = i; o.textContent = k; sel.appendChild(o); }); sel.value = fs.t;
   sel.onchange = function () { fs.t = +sel.value; $('#fsRange').value = fs.t; drawFsMap(); };
@@ -259,7 +277,7 @@ function drawFsPref() {
 }
 function drawFsOther() {
   var se = ['全年', '冬', '春', '夏', '秋'], F = V.front.front;
-  bars($('#fsFront'), se, [{ n: '作業時數', c: css('--acc'), v: se.map(function (s) { return F[s].share_10km_use; }) }, { n: '可及水域', c: css('--dim'), v: se.map(function (s) { return F[s].share_10km_av; }) }], { max: .7, f: function (v) { return Math.round(v * 100) + '%'; }, lab: function (v) { return Math.round(v * 100) + '%'; } });
+  bars($('#fsFront'), se, [{ n: '作業時數', c: css('--acc'), v: se.map(function (s) { return F[s].share_10km_use; }) }, { n: '可及水域', c: css('--dim'), v: se.map(function (s) { return F[s].share_10km_av; }) }], { max: .8, f: function (v) { return Math.round(v * 100) + '%'; }, lab: function (v) { return Math.round(v * 100) + '%'; } });
   var tr = V.dyn.track, w = 520, h = 330, L = 46, s = frame($('#fsTrack'), w, h), x = sc(20, 31, L, w - 12), y = sc(20, 31, 296, 12);
   axY(s, y, [20, 22, 24, 26, 28, 30], L, w - 12, function (v) { return v + '°'; }); [20, 22, 24, 26, 28, 30].forEach(function (v) { T(s, x(v), 314, v + '°', { 'text-anchor': 'middle' }); });
   S('line', { x1: x(20), y1: y(20), x2: x(31), y2: y(31), stroke: css('--dim'), 'stroke-dasharray': '4 3' }, s);
@@ -349,10 +367,10 @@ function expertHtml() {
   return '<h3>專家綜合判讀：拖網漁場 × 海面溫度 × ODB 水文</h3>' +
   '<p>三種資料放在一起看，可以看出臺灣東北海域拖網漁場的物理結構：<b>漁場是由次表層（約 100 m）的冷水抬升區決定，海面溫度只是間接的指標</b>。</p>' +
   '<ul>' +
-  '<li><b>100 m 水溫是最關鍵的物理變數。</b>作業處 100 m 水溫四季都穩定在 17.8–18.2°C，可及水域則為 20.7–21.9°C。選擇性指數在所有時段都是 −1.2 到 −1.5 個標準差，經空間自相關修正後，Spearman ρ = −0.58 到 −0.73，p &lt; 0.05。只用海洋變數建模時，它的置換重要度（ΔAUC ≈ 0.10）是第二名衛星 SST 的 6.5 倍。這對應黑潮在宜蘭外海遇陸棚坡折，次表層水向上湧升而形成的<b>東北角冷渦（cold dome）</b>。</li>' +
+  '<li><b>100 m 水溫是最關鍵的物理變數。</b>作業處 100 m 水溫四季都穩定在 17.8–18.2°C，可及水域則為 20.7–21.9°C。選擇性指數在所有時段都是 −1.2 到 −1.5 個標準差，經空間自相關修正後，Spearman ρ = −0.58 到 −0.73，p &lt; 0.05。只用海洋變數建模時，它的置換重要度（ΔAUC ≈ 0.09）是第二名衛星 SST 的 5.8 倍。這對應黑潮在宜蘭外海遇陸棚坡折，次表層水向上湧升而形成的<b>東北角冷渦（cold dome）</b>。</li>' +
   '<li><b>作業避開黑潮主流，但緊貼流場變動強的區域。</b>作業處近表層流速只有可及水域的 40–80%（全年 ρ = −0.31，p = 0.02）；流速變異 EKE 卻是可及水域的 1.8–2.3 倍（冬季 ρ = 0.42，p = 0.013），冬、春兩季相對渦度也偏向氣旋式（正值，ρ = 0.21–0.25，p &lt; 0.05）。也就是說，漁場位於黑潮邊緣的剪切帶、渦旋與湧升區，而不是主軸。</li>' +
   '<li><b>水團以陸棚混合水為主；春、夏兩季會利用黑潮次表層水。</b>冬、秋兩季，陸棚混合水占作業的 90–95%（可及 62–64%），沿岸稀釋水與黑潮次表層水都被迴避；春季黑潮次表層水占作業 27%（可及 20%），夏季與可及比例相當，顯示春夏黑潮次表層水入侵陸棚邊緣時，形成可以利用的棲地。</li>' +
-  '<li><b>海面溫度與鋒面的訊號，其實是次表層結構在海面的投影。</b>衛星鋒面出現頻率在冬季與東北季風期顯著（ρ = 0.49–0.50，p &lt; 0.03），與 VDR 分析中「冬季 54% 作業位於鋒面 10 km 內」一致；但只用衛星 SST 的模式 AUC 為 ' + fmt(cv['衛星 SST'][0], 2) + '，只用 CTD 為 ' + fmt(cv['CTD 水文'][0], 2) + '，三種物理資料合併為 ' + fmt(cv['SST+CTD+ADCP'][0], 2) + '。可見海面溫度只捕捉到部分機制。</li>' +
+  '<li><b>海面溫度與鋒面的訊號，其實是次表層結構在海面的投影。</b>CoralTemp 鋒面出現頻率在冬季、東北季風期與全年顯著（ρ = 0.45–0.47，p &lt; 0.03），夏季與西南季風期也達顯著（ρ = 0.38–0.39），與 VDR 分析中「冬季 54% 作業位於鋒面 10 km 內」一致；但只用衛星 SST 的模式 AUC 為 ' + fmt(cv['衛星 SST'][0], 2) + '，只用 CTD 為 ' + fmt(cv['CTD 水文'][0], 2) + '，三種物理資料合併為 ' + fmt(cv['SST+CTD+ADCP'][0], 2) + '。可見海面溫度只捕捉到部分機制。</li>' +
   '<li><b>地形仍是最強的單一限制。</b>只用離岸距離與觀測水深下限，AUC 為 ' + fmt(cv['地形（離岸+水深）'][0], 2) + '，全部變數合併為 ' + fmt(cv['全部變數'][0], 2) + '。物理條件與地形高度共線：冷渦本身就是坡折地形與黑潮交互作用的產物。</li>' +
   '<li><b>季風轉換時，作業量往流速變異增加的格點移動</b>（ΔEKE 與 Δ作業占比 ρ = 0.26，p = 0.004），但這一項沒有做空間自相關修正，應視為假說。</li>' +
   '</ul>' +
@@ -377,17 +395,18 @@ function idb(mode, fn) { return new Promise(function (res, rej) { var r = indexe
 function idbGet() { return idb('readonly', function (st) { return st.get('data'); }); }
 function idbPut(txt) { return idb('readwrite', function (st) { st.put(txt, 'data'); }); }
 function idbDel() { return idb('readwrite', function (st) { st.delete('data'); }); }
-function valid(j) { return j && j.odb && j.vdr && j.r1 && j.r2; }
+var DATA_VER = 'crw31';
+function valid(j) { return j && j.odb && j.vdr && j.r1 && j.r2 && j.ver === DATA_VER; }
 function askFile() {
   return new Promise(function (res) {
     $$('.odbload').forEach(function (e) { e.remove(); });
     ['odb', 'fsst', 'fodb'].forEach(function (p) {
       var sec = $('#p-' + p), d = document.createElement('div'); d.className = 'card odbload'; sec.classList.add('odbnodata');
-      d.innerHTML = '<h2>載入分析資料檔 <small>data/odb_fishery.json</small></h2><p class="note">本分頁使用的 ODB 水文格點與拖網漁船 VDR 網格作業量<b>不隨公開網站散布</b>。請選擇您本機的 <code>odb_fishery.json</code>（約 5 MB），資料只在您的瀏覽器內讀取，並快取在本機 IndexedDB，下次開啟會自動載入。</p><div class="ctl"><input type="file" accept=".json,application/json" class="odbfile"> <span class="note odbmsg" style="margin:0"></span></div>';
+      d.innerHTML = '<h2>載入分析資料檔 <small>data/odb_fishery.json</small></h2><p class="note">本分頁使用的 ODB 水文格點與拖網漁船 VDR 網格作業量<b>不隨公開網站散布</b>。請選擇您本機的 <code>odb_fishery.json</code>（約 5 MB，須為 CoralTemp v3.1 版本；舊版檔案會被拒絕），資料只在您的瀏覽器內讀取，並快取在本機 IndexedDB，下次開啟會自動載入。</p><div class="ctl"><input type="file" accept=".json,application/json" class="odbfile"> <span class="note odbmsg" style="margin:0"></span></div>';
       sec.insertBefore(d, sec.firstChild);
     });
     $$('.odbfile').forEach(function (inp) { inp.onchange = function () { var f = inp.files[0]; if (!f) return; var msg = inp.parentNode.querySelector('.odbmsg'); msg.textContent = '讀取中…';
-      f.text().then(function (txt) { var j = JSON.parse(txt); if (!valid(j)) throw new Error('檔案格式不符'); idbPut(txt).catch(function () {}); $$('.odbload').forEach(function (e) { e.remove(); }); $$('.odbnodata').forEach(function (e) { e.classList.remove('odbnodata'); }); res(j); })
+      f.text().then(function (txt) { var j = JSON.parse(txt); if (!valid(j)) throw new Error(j && j.odb && !j.ver ? '這是舊版（水試所海溫圖）資料檔，請改用 CoralTemp 版' : '檔案格式不符'); idbPut(txt).catch(function () {}); $$('.odbload').forEach(function (e) { e.remove(); }); $$('.odbnodata').forEach(function (e) { e.classList.remove('odbnodata'); }); res(j); })
        .catch(function (e) { msg.textContent = '無法讀取：' + e.message; }); }; });
   });
 }
@@ -407,14 +426,14 @@ function render(p) {
   ensure().then(function () {
     if (!built[p]) { built[p] = 1; if (p === 'odb') buildOdb(); if (p === 'fsst') buildFsst(); if (p === 'fodb') buildFodb(); }
     if (p === 'odb') drawOdbAll();
-    if (p === 'fsst') { drawFsTs(); drawFsMap(); drawFsPref(); drawFsOther(); }
+    if (p === 'fsst') { drawFsTs(); drawFsLt(); drawFsMap(); drawFsPref(); drawFsOther(); }
     if (p === 'fodb') drawFodbCharts();
   }).catch(function (e) { console.error(e); });
 }
 function init() {
   $('#tabs').addEventListener('click', function (e) { var p = e.target.dataset && e.target.dataset.p; if (!p) return; if (PAGES[p]) setTimeout(function () { render(p); }, 0); else cur = null; });
   var t; window.addEventListener('resize', function () { clearTimeout(t); t = setTimeout(function () { if (cur && O) render(cur); }, 250); });
-  var m = $('#methBody'); if (m) { var d = document.createElement('div'); d.innerHTML = '<h3>ODB 水文與拖網漁場耦合（新增分頁）</h3><ul><li><b>ODB 水文</b>：臺灣海洋學門資料庫 CTD 與船載 ADCP 0.25° 氣候場，分四季與東北、西南季風期；衍生分層、混合層、渦度、散度、EKE 等變數。</li><li><b>漁場 × 衛星海溫</b>：將水試所每日衛星海溫圖（G1SST／MUR）數位化為 0.05° 網格，與拖網漁船 VDR 作業時數逐月配對，進行商數分析、Perry–Smith 檢定、GAM、交叉相關與 MCA。2019 年 6–9 月共 20 幅圖的色階標示錯誤，已校正。</li><li><b>漁場 × ODB 水文</b>：計算選擇性指數，以 Clifford 有效樣本數修正 Spearman 相關，並用梯度提升樹做空間區塊交叉驗證、水團分析與季風期轉換分析。詳細判讀見該分頁最後一段。</li></ul>'; m.appendChild(d); }
+  var m = $('#methBody'); if (m) { var d = document.createElement('div'); d.innerHTML = '<h3>ODB 水文與拖網漁場耦合（新增分頁）</h3><ul><li><b>ODB 水文</b>：臺灣海洋學門資料庫 CTD 與船載 ADCP 0.25° 氣候場，分四季與東北、西南季風期；衍生分層、混合層、渦度、散度、EKE 等變數。</li><li><b>漁場 × 衛星海溫</b>：採用 NOAA Coral Reef Watch CoralTemp v3.1 每日 5 km（0.05°）海溫，由 OceanWatch ERDDAP 取得 22–28°N、119–125°E 範圍（2018/11–2025/06 共 2,431 日），與拖網漁船 VDR 作業時數逐月配對：月平均海溫、逐日梯度的月平均、鋒面出現頻率（逐日梯度 ≥ 0.05°C/km 的比例），距平相對 CoralTemp 1991–2020 月氣候值；進行商數分析、Perry–Smith 檢定、GAM、交叉相關與 MCA，並以 1985–2025 月平均計算漁場長期增溫趨勢。</li><li><b>漁場 × ODB 水文</b>：計算選擇性指數，以 Clifford 有效樣本數修正 Spearman 相關，並用梯度提升樹做空間區塊交叉驗證、水團分析與季風期轉換分析。詳細判讀見該分頁最後一段。</li></ul>'; m.appendChild(d); }
   if (location.hash && PAGES[location.hash.slice(1)]) { var b = $$('#tabs button').filter(function (x) { return x.dataset.p === location.hash.slice(1); })[0]; if (b) b.click(); }
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
