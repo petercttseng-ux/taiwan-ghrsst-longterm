@@ -12,9 +12,14 @@ python3 tools/build_ghrsst.py --raw raw/ --base 1991 2020 --out data/
 
 把產生的 `analysis.json` 放進本目錄後，儀表板開啟時會直接載入而略過建置步驟。
 
-### 目前隨附的 `analysis.json`（2026-09-20）
+### 目前隨附的 `analysis.json`（2026-09-21）
 
-由於產製環境無法連到 ERDDAP／NOAA 節點，現行版本改由**水試所每日衛星海溫圖**（2018/11–2025/06，G1SST 與 JPL MUR，
-約每 5 日一幅、共 474 幅）以色階反演數位化為 0.25° 網格，時間上線性內插為逐日（缺口 ≤12 日），再以
-`tools/build_ghrsst.py --src fri --base 2019 2024` 產製。記錄僅約 6.5 年、基期 6 年，**長期趨勢與熱浪統計僅供參考**；
-待能連上 ERDDAP 時，按「開始建置」或重跑 Python 路徑即可換成 CoralTemp／OISST 長期記錄。
+現行版本為 **NOAA Coral Reef Watch CoralTemp v3.1**（每日 5 km，1985/01–2026/09 共 15,231 日），
+自 NOAA OceanWatch 的 ERDDAP（`CRW_sst_v3_1`）以每 5 格取樣為 0.25° 後，執行：
+
+```bash
+python3 tools/build_ghrsst.py --raw raw_crw/ --src crw --base 1991 2020 --out data/
+```
+
+氣候基期為 WMO 標準期 1991–2020，41 年記錄足以支持趨勢與海洋熱浪統計。
+（2026-09-20 以前的版本是由水試所每日衛星海溫圖數位化、基期僅 6 年的暫代資料，已停用。）
